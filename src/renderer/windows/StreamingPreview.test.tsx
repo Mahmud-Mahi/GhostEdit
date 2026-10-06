@@ -40,6 +40,7 @@ beforeEach(() => {
     onConfigCb = cb;
     return () => {};
   }) as any;
+  window.ghostedit.previewReady = vi.fn() as any;
   window.ghostedit.acceptCorrection = vi.fn().mockResolvedValue(undefined) as any;
   window.ghostedit.rejectCorrection = vi.fn().mockResolvedValue(undefined) as any;
   window.close = vi.fn();
@@ -47,6 +48,30 @@ beforeEach(() => {
 
 describe('StreamingPreview', () => {
   // ── Initial state ──
+
+  it('announces readiness after registering preview event listeners', () => {
+    const calls: string[] = [];
+    window.ghostedit.onSetPreviewOriginal = vi.fn((cb) => {
+      onOriginalCb = cb;
+      calls.push('original');
+      return () => {};
+    }) as any;
+    window.ghostedit.onStreamingDone = vi.fn((cb) => {
+      onDoneCb = cb;
+      calls.push('done');
+      return () => {};
+    }) as any;
+    window.ghostedit.onSetPreviewConfig = vi.fn((cb) => {
+      onConfigCb = cb;
+      calls.push('config');
+      return () => {};
+    }) as any;
+    window.ghostedit.previewReady = vi.fn(() => calls.push('ready')) as any;
+
+    render(<StreamingPreview />);
+
+    expect(calls).toEqual(['original', 'done', 'config', 'ready']);
+  });
 
   it('shows "Waiting..." when no corrected text received', () => {
     render(<StreamingPreview />);

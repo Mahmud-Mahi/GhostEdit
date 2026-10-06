@@ -15,9 +15,10 @@ vi.mock('../components/HotkeyInput', () => ({
 
 // Mock Welcome
 vi.mock('../components/Welcome', () => ({
-  default: ({ onComplete }: { onComplete: (u: any) => void }) => (
+  default: ({ onComplete }: { onComplete: (u: any, installLocalModel: boolean) => void }) => (
     <div data-testid="welcome">
-      <button onClick={() => onComplete({ firstRunComplete: true })}>Complete</button>
+      <button onClick={() => onComplete({ firstRunComplete: true, provider: 'local' }, true)}>Complete Local</button>
+      <button onClick={() => onComplete({ firstRunComplete: true, provider: 'claude' }, false)}>Complete API</button>
     </div>
   ),
 }));
@@ -52,6 +53,13 @@ beforeEach(() => {
     variants: [],
   }) as any;
   window.ghostedit.getInferenceDevice = vi.fn().mockResolvedValue(null) as any;
+  window.ghostedit.getStartupSetupStatus = vi.fn().mockResolvedValue({
+    active: false,
+    stage: 'ready',
+    progress: 100,
+    message: 'Setup complete',
+  }) as any;
+  window.ghostedit.onStartupSetupStatus = vi.fn().mockReturnValue(() => {}) as any;
   window.ghostedit.saveConfig = vi.fn().mockResolvedValue({ success: true }) as any;
   window.ghostedit.onDownloadVariantProgress = vi.fn().mockReturnValue(() => {}) as any;
   window.ghostedit.onDownloadVariantError = vi.fn().mockReturnValue(() => {}) as any;
@@ -67,14 +75,62 @@ beforeEach(() => {
 });
 
 describe('Settings component', () => {
-  it('renders Welcome when firstRunComplete=false', async () => {
+  it('renders Welcome after first-run setup completes', async () => {
     window.ghostedit.getConfig = vi.fn().mockResolvedValue({
       ...DEFAULT_CONFIG,
       firstRunComplete: false,
     }) as any;
 
     render(<Settings />);
-    expect(screen.getByTestId('welcome')).toBeInTheDocument();
+    expect(await screen.findByTestId('welcome')).toBeInTheDocument();
+  });
+
+  it('starts local model setup only when Local is selected during onboarding', async () => {
+    window.ghostedit.getConfig = vi.fn().mockResolvedValue({
+      ...DEFAULT_CONFIG,
+      firstRunComplete: false,
+    }) as any;
+    render(<Settings />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Complete Local' }));
+
+    await waitFor(() => {
+      expect(window.ghostedit.startLocalModelSetup).toHaveBeenCalledTimes(1);
+    });
+    expect(window.ghostedit.saveConfig).toHaveBeenCalledWith(expect.objectContaining({ provider: 'local' }));
+  });
+
+  it('does not start local model setup when an API provider is selected during onboarding', async () => {
+    window.ghostedit.getConfig = vi.fn().mockResolvedValue({
+      ...DEFAULT_CONFIG,
+      firstRunComplete: false,
+    }) as any;
+    render(<Settings />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Complete API' }));
+
+    await waitFor(() => {
+      expect(window.ghostedit.saveConfig).toHaveBeenCalledWith(expect.objectContaining({ provider: 'claude' }));
+    });
+    expect(window.ghostedit.startLocalModelSetup).not.toHaveBeenCalled();
+  });
+
+  it('shows setup progress before Welcome on first run', async () => {
+    window.ghostedit.getConfig = vi.fn().mockResolvedValue({
+      ...DEFAULT_CONFIG,
+      firstRunComplete: false,
+    }) as any;
+    window.ghostedit.getStartupSetupStatus = vi.fn().mockResolvedValue({
+      active: true,
+      stage: 'model',
+      progress: 42,
+      message: 'Downloading the Bonsai model',
+    }) as any;
+
+    render(<Settings />);
+    expect(await screen.findByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
+    expect(screen.getByText('Downloading the Bonsai model')).toBeInTheDocument();
+    expect(screen.queryByTestId('welcome')).not.toBeInTheDocument();
   });
 
   // ── Sidebar Navigation ──
@@ -192,6 +248,17 @@ describe('Settings component', () => {
       expect(screen.getByText('Correction Engine')).toBeInTheDocument();
     });
     expect(screen.getByText('Bundled')).toBeInTheDocument();
+  });
+
+  it('Models section can start local model setup for an API/CLI user', async () => {
+    render(<Settings />);
+    await waitForSettingsLoaded();
+    fireEvent.click(within(getSidebar()).getByText('Models'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Download Local Model' }));
+
+    await waitFor(() => {
+      expect(window.ghostedit.startLocalModelSetup).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('Models section shows Download button for unavailable bonsai models', async () => {

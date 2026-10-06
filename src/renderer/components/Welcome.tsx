@@ -4,7 +4,7 @@ import { ALL_PROVIDERS, CLI_PROVIDERS } from '../../shared/constants';
 
 interface WelcomeProps {
   config: AppConfig;
-  onComplete: (updates: Partial<AppConfig>) => void;
+  onComplete: (updates: Partial<AppConfig>, installLocalModel: boolean) => void;
 }
 
 const SAMPLE_TEXT = "Ths is a tset of GhostEdit's corection engine.";
@@ -43,13 +43,14 @@ export default function Welcome({ config, onComplete }: WelcomeProps) {
   const handleNext = () => {
     if (isLast) {
       if (selectedProvider === 'local') {
-        onComplete({ firstRunComplete: true });
+        onComplete({ firstRunComplete: true, provider: 'local' }, true);
       } else {
         onComplete({
           firstRunComplete: true,
+          provider: selectedProvider,
           cliProvider: selectedProvider as CLIProviderName,
           cliModel: CLI_PROVIDERS[selectedProvider]?.defaultModel ?? 'sonnet',
-        });
+        }, false);
       }
     } else {
       setStep(step + 1);

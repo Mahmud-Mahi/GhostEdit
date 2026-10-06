@@ -70,7 +70,7 @@ import { IPC } from '../shared/types';
 beforeEach(() => {
   vi.clearAllMocks();
   Object.keys(handlers).forEach((k) => delete handlers[k]);
-  mockConfigLoad.mockReturnValue({ localModelVariant: 'q4f16', localModelEngine: 'bonsai', bonsaiModelSize: '1.7b' });
+  mockConfigLoad.mockReturnValue({ localModelVariant: 'q4f16', localModelEngine: 'bonsai', bonsaiModelSize: '1.7b' } as any);
   registerIPCHandlers(vi.fn());
 });
 

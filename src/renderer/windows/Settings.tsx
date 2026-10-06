@@ -66,8 +66,12 @@ export default function Settings() {
 
   // Usage stats state
   const [stats, setStats] = useState<UsageStats | null>(null);
+  const [startupSetup, setStartupSetup] = useState<Awaited<ReturnType<typeof window.ghostedit.getStartupSetupStatus>> | null>(null);
+  const [retryingStartupSetup, setRetryingStartupSetup] = useState(false);
 
   useEffect(() => {
+    const removeStartupListener = window.ghostedit.onStartupSetupStatus(setStartupSetup);
+    window.ghostedit.getStartupSetupStatus().then(setStartupSetup);
     window.ghostedit.getConfig().then(setConfig);
     window.ghostedit.getCLIStatus().then(setCLIStatus);
     window.ghostedit.getLocalModelStatus().then(setModelInfo);
@@ -86,8 +90,24 @@ export default function Settings() {
     const removeBonsaiErrorListener = window.ghostedit.onDownloadBonsaiError((data) => {
       setBonsaiDownloadError(data.error);
     });
-    return () => { removeProgressListener(); removeErrorListener(); removeBonsaiProgressListener(); removeBonsaiErrorListener(); };
+    return () => {
+      removeStartupListener();
+      removeProgressListener();
+      removeErrorListener();
+      removeBonsaiProgressListener();
+      removeBonsaiErrorListener();
+    };
   }, []);
+
+  const handleStartLocalModelSetup = useCallback(async () => {
+    if (retryingStartupSetup) return;
+    setRetryingStartupSetup(true);
+    try {
+      await window.ghostedit.startLocalModelSetup();
+    } finally {
+      setRetryingStartupSetup(false);
+    }
+  }, [retryingStartupSetup]);
 
   // Load section-specific data when switching
   useEffect(() => {
@@ -109,6 +129,14 @@ export default function Settings() {
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   }, []);
+
+  const handleWelcomeComplete = useCallback(async (updates: Partial<AppConfig>, installLocalModel: boolean) => {
+    await save({ ...config, ...updates });
+    if (installLocalModel) {
+      setActiveSection('models');
+      await window.ghostedit.startLocalModelSetup();
+    }
+  }, [config, save]);
 
   const update = useCallback(
     (partial: Partial<AppConfig>) => {
@@ -222,12 +250,68 @@ export default function Settings() {
     }
   }, []);
 
+  if (startupSetup?.active || startupSetup?.stage === 'error') {
+    const isError = startupSetup?.stage === 'error';
+    const progress = startupSetup?.progress ?? null;
+    return (
+      <div className="flex h-screen flex-col bg-ghost-bg text-ghost-text">
+        <div className={`drag-region h-10 shrink-0 ${isMac ? 'pl-[72px]' : 'pl-4'}`} />
+        <main className="flex flex-1 flex-col items-center justify-center px-8" aria-live="polite">
+          <div className="w-full max-w-sm">
+            <div className="mb-6 flex items-center gap-3">
+              <div className={`h-3 w-3 rounded-full ${isError ? 'bg-red-400' : 'animate-pulse bg-emerald-400'}`} />
+              <span className="text-xs font-medium uppercase tracking-wide text-ghost-muted">
+                {isError ? 'Setup paused' : 'Preparing GhostEdit'}
+              </span>
+            </div>
+            <h1 className="mb-2 text-xl font-semibold text-white">
+              {isError ? 'Download could not finish' : 'Please wait'}
+            </h1>
+            <p className="mb-6 text-sm text-ghost-muted">
+              {startupSetup?.message ?? 'Preparing the local model for its first launch.'}
+            </p>
+            <div
+              className="h-2 overflow-hidden rounded-full bg-white/10"
+              role="progressbar"
+              aria-label="First-run setup progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress ?? undefined}
+            >
+              {progress === null ? (
+                <div className="h-full w-1/3 animate-pulse rounded-full bg-emerald-400" />
+              ) : (
+                <div className="h-full rounded-full bg-emerald-400 transition-[width] duration-300" style={{ width: `${progress}%` }} />
+              )}
+            </div>
+            <div className="mt-2 flex justify-between text-xs text-ghost-muted">
+              <span>{startupSetup?.stage === 'server' ? 'Server' : startupSetup?.stage === 'model' ? 'Model' : 'Initialization'}</span>
+              <span>{progress === null ? 'Working…' : `${progress}%`}</span>
+            </div>
+            {isError && (
+              <>
+                <p className="mt-4 break-words text-xs text-red-300">{startupSetup.error}</p>
+                <button
+                  onClick={handleStartLocalModelSetup}
+                  disabled={retryingStartupSetup}
+                  className="mt-5 rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-emerald-400 disabled:opacity-50"
+                >
+                  {retryingStartupSetup ? 'Retrying…' : 'Retry download'}
+                </button>
+              </>
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   // Show onboarding if first run hasn't been completed
   if (!config.firstRunComplete) {
     return (
       <Welcome
         config={config}
-        onComplete={(updates) => update(updates)}
+        onComplete={handleWelcomeComplete}
       />
     );
   }
@@ -382,6 +466,20 @@ export default function Settings() {
                     <option value="bonsai">Bonsai (Recommended)</option>
                     <option value="t5">T5 (Legacy)</option>
                   </select>
+                </div>
+
+                <div className="settings-row">
+                  <div>
+                    <p className="text-[13px] font-medium">Local Model Setup</p>
+                    <p className="text-[11px] text-ghost-muted">Download or update the local server and Bonsai model</p>
+                  </div>
+                  <button
+                    onClick={handleStartLocalModelSetup}
+                    disabled={retryingStartupSetup || startupSetup?.active}
+                    className="rounded-md bg-blue-500/20 px-3 py-1.5 text-[12px] font-medium text-blue-400 transition-colors hover:bg-blue-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {retryingStartupSetup ? 'Starting…' : 'Download Local Model'}
+                  </button>
                 </div>
 
                 <div className="border-b border-ghost-row-border my-2" />

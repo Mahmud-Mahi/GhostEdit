@@ -186,6 +186,14 @@ export interface BonsaiServerStatus {
   modelSize: BonsaiModelSize | null;
 }
 
+export interface StartupSetupStatus {
+  active: boolean;
+  stage: 'checking' | 'server' | 'model' | 'starting' | 'ready' | 'error';
+  progress: number | null;
+  message: string;
+  error?: string;
+}
+
 // ── IPC Channel Names ──
 
 export const IPC = {
@@ -212,6 +220,7 @@ export const IPC = {
   DOWNLOAD_VARIANT_ERROR: 'download-variant-error',
   SET_PREVIEW_ORIGINAL: 'set-preview-original',
   SET_PREVIEW_CONFIG: 'set-preview-config',
+  PREVIEW_READY: 'preview-ready',
   INFERENCE_COMMAND: 'inference:command',
   INFERENCE_RESULT: 'inference:result',
   GET_INFERENCE_DEVICE: 'get-inference-device',
@@ -233,6 +242,9 @@ export const IPC = {
   DOWNLOAD_BONSAI_MODEL: 'download-bonsai-model',
   DOWNLOAD_BONSAI_PROGRESS: 'download-bonsai-progress',
   DOWNLOAD_BONSAI_ERROR: 'download-bonsai-error',
+  GET_STARTUP_SETUP_STATUS: 'get-startup-setup-status',
+  STARTUP_SETUP_STATUS: 'startup-setup-status',
+  START_LOCAL_MODEL_SETUP: 'start-local-model-setup',
 } as const;
 
 // ── Dictionary Checker ──

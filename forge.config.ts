@@ -1,9 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { MakerDMG } from '@electron-forge/maker-dmg';
+import { MakerDeb } from '@electron-forge/maker-deb';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 
 // Native/external modules that Vite externalizes and must ship in node_modules.
@@ -23,6 +25,11 @@ const EXTERNAL_MODULES = [
   '@img',             // sharp native bindings
   'detect-libc',      // sharp
   'semver',           // sharp
+];
+
+const ICON_EXTRA_RESOURCES = [
+  './assets/MenuBarIconIdle.png',
+  './assets/MenuBarIconProcessing.png',
 ];
 
 /**
@@ -94,6 +101,19 @@ function collectExternalPackages(sourceModules: string): Set<string> {
 
 const config: ForgeConfig = {
   hooks: {
+    prePackage: async (forgeConfig, platform, arch) => {
+      execFileSync(process.execPath, [
+        path.join(__dirname, 'scripts', 'download-llama-server.mjs'),
+        '--platform',
+        platform,
+        '--arch',
+        arch,
+      ], { stdio: 'inherit' });
+      forgeConfig.packagerConfig.extraResource = [
+        ...ICON_EXTRA_RESOURCES,
+        path.join(__dirname, 'resources', 'bin', `${platform}-${arch}`),
+      ];
+    },
     packageAfterCopy: async (_config, buildPath) => {
       const sourceModules = path.join(__dirname, 'node_modules');
       const targetModules = path.join(buildPath, 'node_modules');
@@ -108,32 +128,41 @@ const config: ForgeConfig = {
       }
       console.log(`[forge hook] Copied ${packages.size} external packages to build`);
 
-      // Set llama-server binary as executable on unix
-      if (process.platform !== 'win32') {
-        const binDir = path.join(buildPath, '..', 'bin');
-        const llamaBin = path.join(binDir, 'llama-server');
-        if (fs.existsSync(llamaBin)) {
-          fs.chmodSync(llamaBin, 0o755);
-        }
-      }
     },
   },
   packagerConfig: {
     name: 'GhostEdit',
+    executableName: 'ghostedit',
     icon: './assets/icon',
     appBundleId: 'com.ghostedit.electron',
     asar: {
       unpack: '{**/*.node,**/*.dylib,**/*.so,**/*.so.*,**/*.dll}',
     },
-    extraResource: ['./resources/models', './resources/bin', './assets/MenuBarIconIdle.png', './assets/MenuBarIconProcessing.png'],
+    extraResource: ICON_EXTRA_RESOURCES,
     extendInfo: {
       LSUIElement: true, // Hide from dock on macOS
     },
   },
   makers: [
-    new MakerSquirrel({ name: 'GhostEdit' }),
-    new MakerZIP({}, ['darwin', 'linux']),
+    new MakerSquirrel({ name: 'GhostEdit', authors: 'GhostEdit contributors' }),
+    new MakerZIP({}, ['darwin']),
     new MakerDMG({ format: 'ULFO' }),
+    new MakerDeb({
+      options: {
+        name: 'ghostedit',
+        maintainer: 'GhostEdit contributors',
+        homepage: 'https://github.com/nareshnavinash/ghostedit-electron',
+        description: 'Cross-platform AI text correction from the menu bar',
+        depends: [
+          'libasound2', 'libatk1.0-0', 'libatk-bridge2.0-0', 'libatspi2.0-0',
+          'libc6', 'libcairo2', 'libcups2', 'libdbus-1-3', 'libdrm2', 'libexpat1',
+          'libgbm1', 'libgcc-s1', 'libglib2.0-0', 'libgtk-3-0', 'libnspr4', 'libnss3',
+          'libpango-1.0-0', 'libstdc++6', 'libx11-6', 'libx11-xcb1', 'libxcb1',
+          'libxcomposite1', 'libxdamage1', 'libxext6', 'libxfixes3', 'libxkbcommon0',
+          'libxrandr2', 'libxrender1', 'libxss1', 'libxtst6', 'xdg-utils',
+        ],
+      },
+    }, ['linux']),
   ],
   plugins: [
     new VitePlugin({

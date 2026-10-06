@@ -11,6 +11,7 @@ import type {
   BonsaiModelSize,
   BonsaiModelInfo,
   BonsaiServerStatus,
+  StartupSetupStatus,
   WindowType,
 } from '../shared/types';
 
@@ -123,6 +124,17 @@ const api = {
     return () => ipcRenderer.removeListener(IPC.DOWNLOAD_BONSAI_ERROR, listener);
   },
 
+  // ── Startup model setup ──
+  getStartupSetupStatus: (): Promise<StartupSetupStatus> =>
+    ipcRenderer.invoke(IPC.GET_STARTUP_SETUP_STATUS),
+  onStartupSetupStatus: (callback: (status: StartupSetupStatus) => void) => {
+    const listener = (_event: any, status: StartupSetupStatus) => callback(status);
+    ipcRenderer.on(IPC.STARTUP_SETUP_STATUS, listener);
+    return () => ipcRenderer.removeListener(IPC.STARTUP_SETUP_STATUS, listener);
+  },
+  startLocalModelSetup: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC.START_LOCAL_MODEL_SETUP),
+
   // ── Preview original text (from main → renderer) ──
   onSetPreviewOriginal: (callback: (text: string) => void) => {
     const listener = (_event: any, text: string) => callback(text);
@@ -134,6 +146,7 @@ const api = {
     ipcRenderer.on(IPC.SET_PREVIEW_CONFIG, listener);
     return () => ipcRenderer.removeListener(IPC.SET_PREVIEW_CONFIG, listener);
   },
+  previewReady: () => ipcRenderer.send(IPC.PREVIEW_READY),
 
   // ── Error Log ──
   getErrorLog: (): Promise<ErrorLogEntry[]> =>

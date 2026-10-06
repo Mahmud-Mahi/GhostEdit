@@ -101,7 +101,10 @@
 | Codex | `codex` | `npm install -g @openai/codex` |
 | Gemini | `gemini` | [ai.google.dev/gemini-api/docs/cli](https://ai.google.dev/gemini-api/docs/cli) |
 
-Cloud providers are **not required** — the built-in local model works offline with zero setup.
+Cloud providers are **not required**. The llama.cpp server is bundled per OS and
+architecture. When Local is selected, GhostEdit downloads the Bonsai model from
+Hugging Face to `~/.ghostedit/models/bonsai/`; after download, local corrections
+work offline.
 
 ---
 
@@ -115,15 +118,12 @@ cd ghostedit-electron
 npm install
 ```
 
-### Download the bundled model
-
-The Q4F16 model variant (~210 MB) is bundled for offline use:
-
-```bash
-npm run download-model
-```
-
-This downloads the T5 grammar correction model to `resources/models/` for packaging.
+Each installer bundles the matching llama.cpp CPU server executable and its
+native libraries. When the user selects Local during onboarding, GhostEdit
+downloads the selected Bonsai GGUF model from Hugging Face into
+`~/.ghostedit/models/bonsai/`. API/CLI users do not download the local model
+unless they explicitly choose **Download Local Model** from the tray menu or
+Settings.
 
 ---
 
@@ -134,11 +134,11 @@ This downloads the T5 grammar correction model to `resources/models/` for packag
 npm start
 ```
 
-On first launch, a 3-step onboarding wizard will guide you through:
+On first launch, onboarding lets you choose a provider before local model setup:
 
-1. **Choose a provider** — Local (offline) or a cloud CLI
-2. **Set the hotkey** — Default is `Cmd+Shift+E` / `Ctrl+Shift+E`
-3. **Grant permissions** — On macOS, allow Accessibility access when prompted
+1. Choose Local or a cloud CLI provider.
+2. If Local is selected, the app downloads the Bonsai model and shows progress.
+3. Set preferences and try a correction in the onboarding flow.
 
 After setup:
 
@@ -449,14 +449,58 @@ Produces platform-specific installers:
 
 | Platform | Format | Output |
 |----------|--------|--------|
-| macOS | DMG | `out/make/*.dmg` |
-| Windows | Squirrel | `out/make/squirrel.windows/` |
-| Linux | ZIP | `out/make/zip/linux-x64/` |
+| macOS | DMG + ZIP | `out/make/` |
+| Windows | Squirrel (`Setup.exe`) | `out/make/squirrel.windows/` |
+| Linux | Debian | `out/make/deb/x64/` |
+
+### Build a Debian package
+
+On Linux x64, install `dpkg-deb` and `fakeroot`, then run:
+
+```bash
+npm run make:deb
+```
+
+The packaging hook downloads the pinned llama.cpp CPU archive for the target,
+verifies its SHA-256, and includes its server executable and libraries in the
+`.deb`. The Bonsai model remains an on-demand Hugging Face download. Debian
+dependencies for Electron and keyboard/desktop integration are declared in the
+package metadata.
+
+Linux ARM64 builds can be made with:
+
+```bash
+npm run make:deb:arm64
+```
+
+### Build Windows and macOS installers
+
+Build on the matching operating system so Forge can produce its native installer:
+
+```bash
+# Windows x64: Squirrel Setup.exe installer
+npm run make:win
+
+# Windows ARM64 Squirrel installer
+npm run make:win:arm64
+
+# macOS Apple Silicon DMG
+npm run make:mac:arm64
+
+# macOS Intel DMG
+npm run make:mac:x64
+```
+
+Windows produces the Squirrel installer set, including `Setup.exe`; macOS
+produces DMG and ZIP artifacts. Each build bundles only its own OS/architecture
+server. Run these commands on Windows or macOS, respectively, rather than on
+Linux.
 
 ### What gets bundled
 
 - The Electron app (ASAR-packed)
-- Bundled Q4F16 model variant (`resources/models/`)
+- The target OS/architecture llama.cpp server and libraries
+- App code and UI assets (Bonsai model weights are downloaded per-user)
 - All production dependencies
 - App icon (`assets/icon.svg`)
 

@@ -45,6 +45,7 @@ export default function StreamingPreview() {
         setPassiveCountdown(cfg.passivePreviewSeconds);
       }
     });
+    window.ghostedit.previewReady();
 
     return () => {
       offOriginal();

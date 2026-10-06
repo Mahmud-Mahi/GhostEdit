@@ -182,6 +182,24 @@ describe('updateMenu', () => {
     expect(hasCliCorrect).toBe(true);
   });
 
+  it('exposes a tray action to download the local model', async () => {
+    const { createTray } = await freshModule();
+    const onDownloadLocalModel = vi.fn();
+    createTray({
+      onCorrectLocal: vi.fn(),
+      onCorrectCLI: vi.fn(),
+      onUndoLastCorrection: vi.fn(),
+      onOpenSettings: vi.fn(),
+      onOpenHistory: vi.fn(),
+      onDownloadLocalModel,
+    });
+
+    const downloadItem = capturedMenuTemplate.find((item: any) => item.label === 'Download Local Model...');
+    expect(downloadItem).toBeDefined();
+    downloadItem.click();
+    expect(onDownloadLocalModel).toHaveBeenCalledTimes(1);
+  });
+
   it('local correction label includes formatted localHotkeyAccelerator', async () => {
     const { createTray } = await freshModule();
     const callbacks = {

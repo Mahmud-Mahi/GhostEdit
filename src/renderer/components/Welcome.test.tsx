@@ -60,7 +60,7 @@ describe('Welcome component', () => {
     // Default is local; click Get Started
     fireEvent.click(screen.getByText('Get Started'));
 
-    expect(onComplete).toHaveBeenCalledWith({ firstRunComplete: true });
+    expect(onComplete).toHaveBeenCalledWith({ firstRunComplete: true, provider: 'local' }, true);
   });
 
   it('completing onboarding with CLI provider sets cliProvider and cliModel', () => {
@@ -79,9 +79,11 @@ describe('Welcome component', () => {
     expect(onComplete).toHaveBeenCalledWith(
       expect.objectContaining({
         firstRunComplete: true,
+        provider: 'claude',
         cliProvider: 'claude',
         cliModel: 'sonnet',
       }),
+      false,
     );
   });
 
