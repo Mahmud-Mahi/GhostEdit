@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nareshnavinash/ghostedit-electron/releases/latest"><img src="https://img.shields.io/github/v/release/nareshnavinash/ghostedit-electron?color=22c55e&label=version" alt="Version"></a>
+  <a href="https://github.com/nareshnavinash/GhostEdit/releases/latest"><img src="https://img.shields.io/github/v/release/nareshnavinash/GhostEdit?color=22c55e&label=version" alt="Version"></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/nareshnavinash/ghostedit-electron" alt="License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/nareshnavinash/GhostEdit" alt="License"></a>
 </p>
 
 <p align="center">Cross-platform AI text correction from the menu bar</p>
@@ -23,25 +23,26 @@
 | | **GhostEdit** | Grammarly | LanguageTool | Apple Writing Tools |
 |---|---|---|---|---|
 | Works in any app | **Yes** (system-wide) | Browser + select apps | Browser + select apps | Yes |
-| Offline mode | **Yes** (built-in T5 model) | No | Server only | Yes |
-| Multi-provider AI | **Claude, GPT, Gemini, local** | Grammarly AI only | LanguageTool only | Apple AI only |
+| Offline mode | **Yes** (built-in Bonsai model) | No | Server only | Yes |
+| Multi-provider AI | **Local, Claude, GPT, Gemini, any OpenAI-compatible API** | Grammarly AI only | LanguageTool only | Apple AI only |
 | Open source | **MIT** | No | LGPL | No |
 | Price | **Free** | $12/mo | $5/mo (premium) | Free (Apple only) |
 
 ### Key Features
 
 - **Works in every app** -- System-wide hotkey correction, not a browser extension
-- **Offline-first AI** -- Built-in T5 grammar model runs on-device, no API keys needed
-- **Multi-provider** -- Switch between local AI, Claude, GPT, or Gemini in one click
+- **Offline-first AI** -- Built-in Bonsai grammar model runs on-device, no API keys needed
+- **Multi-provider** -- Switch between local AI, Claude, GPT, Gemini, or any OpenAI-compatible API in one click
+- **Bring your own key** -- OpenAI, OpenRouter, Groq, Together, Ollama, and LM Studio presets with encrypted key storage
 - **Real-time monitoring** -- Traffic light indicator shows writing quality as you type
 - **Developer-friendly** -- Preserves code, URLs, @mentions, :emoji:, and file paths
 - **13 languages + tone presets** -- Auto-detect language, choose from 5 writing styles
 
 ### Quick Start
 
-1. **Download** the latest release from [GitHub Releases](https://github.com/nareshnavinash/ghostedit-electron/releases/latest)
+1. **Download** the latest release from [GitHub Releases](https://github.com/nareshnavinash/GhostEdit/releases/latest)
 2. **Open** GhostEdit -- it lives in your menu bar
-3. **Select text** anywhere and press `Cmd+Shift+E` (Mac) or `Ctrl+Shift+E` (Win/Linux)
+3. **Select text** anywhere and press the hotkey: `Cmd+E` (local) / `Cmd+Shift+E` (CLI) / `Cmd+Alt+E` (API) on macOS, `Ctrl+...` on Win/Linux
 
 <!-- Add screenshot/GIF here: place a demo GIF or screenshot at assets/demo.gif and uncomment the line below -->
 <!-- <p align="center"><img src="assets/demo.gif" width="600" alt="GhostEdit demo"></p> -->
@@ -69,9 +70,10 @@
 
 ## Features
 
-- **Global hotkey** — Press `Cmd+Shift+E` (Mac) or `Ctrl+Shift+E` (Win/Linux) from any app
-- **Offline-first** — Built-in T5 grammar model runs entirely on-device, no API keys needed
+- **Global hotkey** — Three configurable shortcuts: `Cmd+E` / `Ctrl+E` (local), `Cmd+Shift+E` / `Ctrl+Shift+E` (CLI), `Cmd+Alt+E` / `Ctrl+Alt+E` (API)
+- **Offline-first** — Built-in Bonsai model served by the bundled llama.cpp runtime runs entirely on-device, no API keys needed
 - **Cloud providers** — Claude, Codex (OpenAI), and Gemini via their CLI tools
+- **OpenAI-compatible API** — Bring your own key for OpenAI, OpenRouter, Groq, Together AI, or local servers (Ollama, LM Studio); streaming corrections with encrypted key storage
 - **Dictionary pre-pass** — Harper.js (grammar) + nspell (spelling) fix obvious errors before the AI sees the text, making corrections faster and cheaper
 - **Dictionary polish** — Same engine runs again on model output to catch any remaining issues
 - **Diff preview** — Side-by-side streaming diff before accepting changes (Tab to accept, Esc to cancel)
@@ -80,8 +82,8 @@
 - **13 languages** — Auto-detect or specify: English, Spanish, French, German, Italian, Portuguese, Japanese, Korean, Chinese, Russian, Arabic, Hindi
 - **Correction history** — Browse, search, and review past corrections
 - **Correction cache** — Identical inputs skip the AI entirely
-- **GPU acceleration** — DirectML (Windows), CUDA (Linux), WebGPU (macOS) for fast local inference
-- **4 model variants** — Q4F16 (210 MB, bundled), INT8, FP16, FP32 (downloadable)
+- **Bundled inference runtime** — Pinned llama.cpp server per OS/architecture, SHA-256 verified at build time
+- **3 Bonsai model sizes** — 1.7B (248 MB, default), 4B (572 MB), and 8B (1.1 GB), downloaded on demand
 - **System tray** — Runs silently in the menu bar with no dock icon (macOS)
 
 ---
@@ -101,6 +103,10 @@
 | Codex | `codex` | `npm install -g @openai/codex` |
 | Gemini | `gemini` | [ai.google.dev/gemini-api/docs/cli](https://ai.google.dev/gemini-api/docs/cli) |
 
+No CLI? Add an **API key** for any OpenAI-compatible host (OpenAI, OpenRouter,
+Groq, Together AI) or a local server (Ollama, LM Studio) in Settings >
+Providers — see [AI Providers](#ai-providers).
+
 Cloud providers are **not required**. The llama.cpp server is bundled per OS and
 architecture. When Local is selected, GhostEdit downloads the Bonsai model from
 Hugging Face to `~/.ghostedit/models/bonsai/`; after download, local corrections
@@ -113,8 +119,8 @@ work offline.
 ### Clone and install dependencies
 
 ```bash
-git clone https://github.com/nareshnavinash/ghostedit-electron.git
-cd ghostedit-electron
+git clone https://github.com/nareshnavinash/GhostEdit.git
+cd GhostEdit
 npm install
 ```
 
@@ -122,8 +128,7 @@ Each installer bundles the matching llama.cpp CPU server executable and its
 native libraries. When the user selects Local during onboarding, GhostEdit
 downloads the selected Bonsai GGUF model from Hugging Face into
 `~/.ghostedit/models/bonsai/`. API/CLI users do not download the local model
-unless they explicitly choose **Download Local Model** from the tray menu or
-Settings.
+unless they choose to download it in **Settings > Local Model**.
 
 ---
 
@@ -136,9 +141,10 @@ npm start
 
 On first launch, onboarding lets you choose a provider before local model setup:
 
-1. Choose Local or a cloud CLI provider.
-2. If Local is selected, the app downloads the Bonsai model and shows progress.
-3. Set preferences and try a correction in the onboarding flow.
+1. Choose a provider: **Local** (offline), an **OpenAI-compatible API** preset, or a cloud CLI tool.
+2. For Local, pick a Bonsai model size (1.7B / 4B / 8B) — the app downloads it and shows progress.
+3. For an API preset, enter your base URL, model, and API key (stored encrypted).
+4. Set preferences and try a correction in the onboarding flow.
 
 After setup:
 
@@ -154,7 +160,7 @@ After setup:
 ### Basic correction
 
 1. **Select text** in any application (editor, browser, Slack, email, etc.)
-2. **Press the hotkey** (`Cmd+Shift+E` by default)
+2. **Press the hotkey** (`Cmd+E` local / `Cmd+Shift+E` CLI / `Cmd+Alt+E` API by default)
 3. GhostEdit captures the selection, corrects it, and pastes the result back
 
 ### Diff preview mode
@@ -173,7 +179,10 @@ When enabled, corrected text is copied to clipboard instead of being pasted back
 
 Right-click (or click on macOS) the tray icon to access:
 
-- **Correct Selected Text** — Trigger correction manually
+- **Correct (Local)** — Run the offline model (`Cmd+E`)
+- **Correct (CLI)** — Run the configured cloud CLI provider (`Cmd+Shift+E`)
+- **Correct (API)** — Run the OpenAI-compatible API provider (`Cmd+Alt+E`)
+- **Undo Last Correction** — Revert the last paste (`Cmd+Shift+Z`)
 - **Settings...** — Open the configuration window
 - **History...** — Browse past corrections
 - **Quit GhostEdit** — Exit the app
@@ -186,9 +195,13 @@ All settings are stored in `~/.ghostedit/config.json` and editable through the S
 
 ### Settings tabs
 
-**General** — Provider, model, CLI path, language, tone, timeout
+**General** — Language, tone, and correction preferences
 
-**Hotkey** — Record a custom global keyboard shortcut
+**Local Model** — Bonsai model size, download, and inference device
+
+**Providers** — CLI tools plus OpenAI-compatible API presets, API key, and model discovery
+
+**Hotkeys** — Record custom global shortcuts (local, CLI, API, undo, line)
 
 **Behavior** — Toggle features:
 
@@ -223,7 +236,8 @@ Create `~/.ghostedit/prompt.txt` to override the default system prompt. The file
 | `~/.ghostedit/config.json` | Application settings |
 | `~/.ghostedit/history.json` | Correction history |
 | `~/.ghostedit/prompt.txt` | Custom system prompt (optional) |
-| `~/.ghostedit/models/` | Downloaded model variants |
+| `~/.ghostedit/api-key.enc` | Encrypted OpenAI-compatible API key |
+| `~/.ghostedit/models/bonsai/` | Downloaded Bonsai GGUF models |
 | `~/.ghostedit/device-cache.json` | Cached GPU/CPU detection result |
 
 ---
@@ -232,19 +246,25 @@ Create `~/.ghostedit/prompt.txt` to override the default system prompt. The file
 
 ### Local model (default)
 
-The built-in model is [Xenova/t5-base-grammar-correction](https://huggingface.co/Xenova/t5-base-grammar-correction), a T5 model fine-tuned for grammar correction, running via ONNX Runtime through `@huggingface/transformers`.
+The default engine is **Bonsai**, a grammar-correction GGUF model served by the
+llama.cpp CPU server bundled with every installer (pinned release, SHA-256
+verified at build time for each OS/architecture).
 
-**Model variants** (downloadable from Settings):
+**Model sizes** (downloaded on demand from Hugging Face to
+`~/.ghostedit/models/bonsai/`, then fully offline):
 
-| Variant | Size | Quality | Speed |
-|---------|------|---------|-------|
-| Q4F16 | 210 MB | Good | Fastest |
-| INT8 | 250 MB | Better | Fast |
-| FP16 | 496 MB | High | Moderate |
-| FP32 | 963 MB | Best | Slowest |
+| Model | Size | Notes |
+|-------|------|-------|
+| Bonsai 1.7B | 248 MB | Default — best speed/quality balance |
+| Bonsai 4B | 572 MB | Better quality |
+| Bonsai 8B | 1.1 GB | Best quality |
 
-Q4F16 is bundled with the app. Other variants can be downloaded from the Settings window.
+Pick a size in **Settings > Local Model** or during onboarding. The first Local
+correction downloads the selected model; afterwards corrections work with no
+network access.
 
+A legacy T5 pipeline (transformers.js + ONNX) remains as a fallback for old
+configs and is auto-migrated to Bonsai on first launch. When it is active,
 **GPU acceleration** is automatic:
 
 | Platform | Primary Device | Fallback |
@@ -253,6 +273,31 @@ Q4F16 is bundled with the app. Other variants can be downloaded from the Setting
 | Windows (any GPU) | DirectML | WebGPU / WASM |
 | Linux x64 (NVIDIA) | CUDA | WebGPU / WASM |
 | Linux arm64 | WebGPU | WASM (CPU) |
+
+### OpenAI-compatible API (bring your own key)
+
+Pick a preset in **Settings > Providers**, paste your API key (encrypted at
+rest with Electron `safeStorage`), and press **Load Models** to choose from the
+host's model list:
+
+| Preset | Base URL | Default model |
+|--------|----------|---------------|
+| OpenAI | `https://api.openai.com/v1` | `gpt-4.1-mini` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `openai/gpt-4.1-mini` |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| Together AI | `https://api.together.xyz/v1` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| Ollama | `http://localhost:11434/v1` | `llama3.2` |
+| LM Studio | `http://localhost:1234/v1` | `local-model` |
+| Custom | (your URL) | (your model) |
+| Claude (Anthropic API) | `https://api.anthropic.com/v1` | `claude-sonnet-4-5` |
+| Codex (OpenAI API) | `https://api.openai.com/v1` | `gpt-5-codex` |
+| Gemini (Google API) | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.5-flash` |
+
+- Corrections **stream** into the diff preview like every other provider.
+- API keys are **encrypted at rest** (`~/.ghostedit/api-key.enc`) and never
+  stored in `config.json`.
+- Trigger with `Ctrl/Cmd+Alt+E` or the tray's **Correct (API)** entry.
+- Local servers (Ollama, LM Studio) work without an API key.
 
 ### Cloud providers
 
@@ -304,7 +349,7 @@ Selected text
   -> Token protection (URLs, @mentions, code, emoji)
   -> Dictionary pre-pass (fix obvious errors)     <-- HERE
   -> Cache lookup
-  -> AI model (local T5 or cloud CLI)
+  -> AI engine (local Bonsai / OpenAI-compatible API / cloud CLI)
   -> Token restoration
   -> Dictionary polish (cleanup model output)      <-- AND HERE
   -> Paste back
@@ -331,8 +376,9 @@ The pre-pass means most simple typos ("teh" -> "the") never reach the AI model, 
 |       v [miss]                                              |
 |  Correction Dispatcher                                      |
 |    +-- CLI Runner (claude/codex/gemini subprocess)          |
-|    +-- Local Model Runner (transformers.js + ONNX)          |
-|    +-- Inference Window (WebGPU/WASM in hidden renderer)    |
+|    +-- API Runner (OpenAI-compatible + native APIs, stream) |
+|    +-- Local Runner (llama.cpp + Bonsai GGUF server)        |
+|    +-- Inference Window (WebGPU/WASM T5 fallback)           |
 |       |                                                     |
 |       v                                                     |
 |  Token Restoration --> Dictionary Polish --> Paste Back      |
@@ -416,16 +462,23 @@ npx vitest run --reporter=verbose
 
 | File | Type | Tests | Covers |
 |------|------|-------|--------|
-| `dictionary-checker.test.ts` | Unit | 50 | Harper/nspell extraction, merge, filtering, fix application, initialization |
-| `dictionary-checker.integration.test.ts` | Integration | 24 | End-to-end with real Harper WASM and nspell Hunspell |
-| `local-model-runner.test.ts` | Unit | 22 | Pipeline loading, device routing, streaming, variant switching |
-| `device-selector.test.ts` | Unit | 12 | Platform detection, disk caching, DirectML/CUDA probing |
-| `correction-dispatcher.test.ts` | Unit | — | Provider routing logic |
-| `correction-cache.test.ts` | Unit | — | Cache hit/miss/invalidation |
-| `ipc-handlers.test.ts` | Unit | — | IPC handler registration and behavior |
-| `cli-runner.test.ts` | Unit | — | CLI subprocess spawning and error handling |
+| `dictionary-checker.test.ts` | Unit | 89 | Harper/nspell extraction, merge, filtering, fix application, initialization |
+| `dictionary-checker.integration.test.ts` | Integration | 36 | End-to-end with real Harper WASM and nspell Hunspell |
+| `token-preservation.test.ts` | Unit | 60 | URL, mention, code, and emoji protection |
+| `constants.test.ts` | Unit | 35 | Provider/preset definitions and defaults |
+| `Settings.test.tsx` | Component | 40 | Settings sections, model downloads, API key management |
+| `local-model-runner.test.ts` | Unit | 24 | Pipeline loading, device routing, streaming, variant switching |
+| `config-manager.test.ts` | Unit | 22 | Config persistence and legacy T5 → Bonsai migration |
+| `history-store.test.ts` | Unit | 18 | History persistence and limits |
+| `openai-compatible-runner.test.ts` | Unit | 12 | API presets, model discovery, streaming, native endpoints |
+| `ipc-handlers.test.ts` | Unit | 12 | IPC handler registration and behavior |
+| `tray-manager.test.ts` | Unit | 19 | Tray menu entries including Correct (API) |
+| `device-selector.test.ts` | Unit | 11 | Platform detection, disk caching, DirectML/CUDA probing |
+| `correction-dispatcher.test.ts` | Unit | 10 | Provider routing (local / CLI / API) |
+| `global-shortcuts.test.ts` | Unit | 10 | Hotkey registration and conflict detection |
+| `cli-runner.test.ts` | Unit | 5 | CLI subprocess spawning and error handling |
 
-Current: **161 tests, all passing**.
+Current: **515 tests across 26 files, all passing**.
 
 ---
 
@@ -515,9 +568,14 @@ src/
   main/                          # Electron main process
     index.ts                     # App lifecycle, correction pipeline, window management
     config-manager.ts            # Config persistence (~/.ghostedit/)
-    correction-dispatcher.ts     # Routes corrections to CLI or local model
+    correction-dispatcher.ts     # Routes corrections to local, CLI, or API providers
     cli-runner.ts                # Spawns CLI subprocesses
-    local-model-runner.ts        # Local T5 model via transformers.js
+    openai-compatible-runner.ts  # OpenAI-compatible + native API corrections (streaming)
+    api-key-store.ts             # Encrypted API key storage (Electron safeStorage)
+    local-model-runner.ts        # Legacy T5 pipeline (fallback)
+    llama-runtime-manager.ts     # Bundled llama.cpp server resolution
+    llama-server-manager.ts      # llama.cpp server lifecycle
+    bonsai-model-manager.ts      # Bonsai GGUF download and scanning
     dictionary-checker.ts        # Harper.js + nspell spell/grammar checking
     clipboard-manager.ts         # Cmd+C/V simulation via nut.js
     token-preservation.ts        # Protects URLs, @mentions, code, emoji
@@ -558,10 +616,13 @@ assets/
   icon.svg                       # App icon
 
 resources/
-  models/                        # Bundled T5 model (Q4F16 variant)
+  bin/                           # llama.cpp server runtime per platform-arch (downloaded at build)
+  models/                        # Legacy T5 model download target (optional)
 
 scripts/
-  download-model.mjs             # Model download script
+  download-llama-server.mjs      # Pinned llama.cpp runtime download (SHA-256 verified)
+  download-bonsai-model.mjs      # Bonsai GGUF download helper
+  download-model.mjs             # Legacy T5 model download script
 ```
 
 ---
@@ -588,9 +649,9 @@ scripts/
 
 ### Local model is slow
 
-- Switch to the Q4F16 variant (smallest, fastest) in Settings
+- Pick the smaller Bonsai 1.7B model in Settings > Local Model
 - Enable "Fast correction mode" in Behavior tab
-- On Windows/Linux, ensure GPU drivers are up to date for DirectML/CUDA acceleration
+- Use a cloud CLI or the OpenAI-compatible API provider for heavier edits
 - Check the inference device in Settings with Developer Mode enabled
 
 ### Corrections take too long
@@ -607,9 +668,16 @@ scripts/
 
 ### Model download fails
 
-- Check your internet connection
-- Try running `npm run download-model` from the terminal for detailed error output
-- Models are downloaded from HuggingFace — ensure `huggingface.co` is accessible
+- Check your internet connection and retry from Settings > Local Model
+- Models are downloaded from Hugging Face — ensure `huggingface.co` is accessible
+- Files land in `~/.ghostedit/models/bonsai/`; delete a partial download and retry
+
+### "API request failed"
+
+- Verify the API key in Settings > Providers (keys are stored encrypted)
+- Confirm the base URL and model name match your host — use **Load Models** to refresh the list
+- For Ollama / LM Studio, ensure the local server is running on the expected port
+- The HUD and error log show the HTTP status and message returned by the host
 
 ---
 
