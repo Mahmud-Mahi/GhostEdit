@@ -54,7 +54,7 @@ const DiffView = React.memo(function DiffView({ segments, side }: DiffViewProps)
           return (
             <span
               key={i}
-              className="bg-red-500/20 text-red-300 line-through decoration-red-400"
+              className="bg-ghost-error/20 text-ghost-error line-through decoration-ghost-error"
             >
               {seg.text}
             </span>
@@ -64,7 +64,7 @@ const DiffView = React.memo(function DiffView({ segments, side }: DiffViewProps)
           return (
             <span key={i} className="relative inline">
               <span
-                className="bg-green-500/20 text-green-300 underline decoration-green-400 cursor-pointer"
+                className="bg-ghost-success/15 text-ghost-success underline decoration-ghost-success cursor-pointer"
                 onClick={() => handleWhyClick(i, seg)}
                 title="Click to see why this was changed"
               >

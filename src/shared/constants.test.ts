@@ -2,13 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { ALL_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDER, DEFAULT_CONFIG, MODEL_VARIANTS, VARIANT_ONNX_FILES, DEFAULT_BUNDLED_VARIANT, BONSAI_MODELS, BONSAI_GGUF_FILES, BONSAI_HF_REPOS, BONSAI_DEFAULT_SYSTEM_PROMPT, LLAMA_SERVER_CONFIG } from './constants';
 
 describe('ALL_PROVIDERS', () => {
-  it('contains all 4 providers', () => {
+  it('contains all 5 providers', () => {
     const keys = Object.keys(ALL_PROVIDERS);
     expect(keys).toContain('claude');
     expect(keys).toContain('codex');
     expect(keys).toContain('gemini');
+    expect(keys).toContain('openai-compatible');
     expect(keys).toContain('local');
-    expect(keys).toHaveLength(4);
+    expect(keys).toHaveLength(5);
   });
 
   it('local has correct displayName, availableModels, defaultModel', () => {

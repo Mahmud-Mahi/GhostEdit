@@ -11,6 +11,7 @@ import type {
   BonsaiModelSize,
   BonsaiModelInfo,
   BonsaiServerStatus,
+  StartupSetupStatus,
   WindowType,
 } from '../shared/types';
 
@@ -26,6 +27,11 @@ const api = {
   // ── CLI Status ──
   getCLIStatus: (): Promise<Record<string, { found: boolean; path: string | null }>> =>
     ipcRenderer.invoke(IPC.GET_CLI_STATUS),
+  getApiKey: (): Promise<string> => ipcRenderer.invoke(IPC.GET_API_KEY),
+  saveApiKey: (apiKey: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.SAVE_API_KEY, apiKey),
+  getApiModels: (): Promise<{ success: boolean; models: string[]; error?: string }> =>
+    ipcRenderer.invoke(IPC.GET_API_MODELS),
 
   // ── Correction ──
   correctText: (
@@ -123,6 +129,17 @@ const api = {
     return () => ipcRenderer.removeListener(IPC.DOWNLOAD_BONSAI_ERROR, listener);
   },
 
+  // ── Startup model setup ──
+  getStartupSetupStatus: (): Promise<StartupSetupStatus> =>
+    ipcRenderer.invoke(IPC.GET_STARTUP_SETUP_STATUS),
+  onStartupSetupStatus: (callback: (status: StartupSetupStatus) => void) => {
+    const listener = (_event: any, status: StartupSetupStatus) => callback(status);
+    ipcRenderer.on(IPC.STARTUP_SETUP_STATUS, listener);
+    return () => ipcRenderer.removeListener(IPC.STARTUP_SETUP_STATUS, listener);
+  },
+  startLocalModelSetup: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC.START_LOCAL_MODEL_SETUP),
+
   // ── Preview original text (from main → renderer) ──
   onSetPreviewOriginal: (callback: (text: string) => void) => {
     const listener = (_event: any, text: string) => callback(text);
@@ -134,6 +151,7 @@ const api = {
     ipcRenderer.on(IPC.SET_PREVIEW_CONFIG, listener);
     return () => ipcRenderer.removeListener(IPC.SET_PREVIEW_CONFIG, listener);
   },
+  previewReady: () => ipcRenderer.send(IPC.PREVIEW_READY),
 
   // ── Error Log ──
   getErrorLog: (): Promise<ErrorLogEntry[]> =>

@@ -182,6 +182,25 @@ describe('updateMenu', () => {
     expect(hasCliCorrect).toBe(true);
   });
 
+  it('exposes a tray action for API correction', async () => {
+    const { createTray } = await freshModule();
+    const onCorrectAPI = vi.fn();
+    createTray({
+      onCorrectLocal: vi.fn(),
+      onCorrectCLI: vi.fn(),
+      onCorrectAPI,
+      onUndoLastCorrection: vi.fn(),
+      onOpenSettings: vi.fn(),
+      onOpenHistory: vi.fn(),
+    });
+
+    const apiItem = capturedMenuTemplate.find((item: any) => item.label?.includes('Correct (API)'));
+    expect(apiItem).toBeDefined();
+    apiItem.click();
+    expect(onCorrectAPI).toHaveBeenCalledTimes(1);
+    expect(capturedMenuTemplate.some((item: any) => item.label === 'Download Local Model...')).toBe(false);
+  });
+
   it('local correction label includes formatted localHotkeyAccelerator', async () => {
     const { createTray } = await freshModule();
     const callbacks = {

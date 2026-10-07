@@ -58,21 +58,21 @@ describe('HudOverlay', () => {
     const { container } = render(<HudOverlay />);
     act(() => hudShowCb('Error: API key missing'));
     // The badge div with bg-* is the parent of the flex container
-    const badge = container.querySelector('[class*="bg-red-900"]');
+    const badge = container.querySelector('[class*="bg-ghost-error"]');
     expect(badge).toBeInTheDocument();
   });
 
   it('applies success styling for "Done!"', () => {
     const { container } = render(<HudOverlay />);
     act(() => hudShowCb('Done!'));
-    const badge = container.querySelector('[class*="bg-green-900"]');
+    const badge = container.querySelector('[class*="bg-ghost-success"]');
     expect(badge).toBeInTheDocument();
   });
 
   it('applies success styling for messages containing "clipboard"', () => {
     const { container } = render(<HudOverlay />);
     act(() => hudShowCb('Copied to clipboard'));
-    const badge = container.querySelector('[class*="bg-green-900"]');
+    const badge = container.querySelector('[class*="bg-ghost-success"]');
     expect(badge).toBeInTheDocument();
   });
 

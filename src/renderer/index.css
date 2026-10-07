@@ -31,11 +31,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(189, 147, 249, 0.25);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(189, 147, 249, 0.45);
 }
 
 /* Drag region for custom title bar */
@@ -48,8 +48,8 @@ body {
 
 /* Form inputs */
 .input {
-  @apply bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-ghost-text
-         focus:outline-none focus:ring-1 focus:ring-blue-400/60 focus:border-blue-400/40
+  @apply bg-ghost-surface border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-ghost-text
+         focus:outline-none focus:ring-1 focus:ring-ghost-accent/60 focus:border-ghost-accent/50
          placeholder:text-ghost-muted w-full h-9;
 }
 

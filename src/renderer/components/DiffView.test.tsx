@@ -28,7 +28,7 @@ describe('DiffView', () => {
     render(<DiffView segments={segments} side="original" />);
     const el = screen.getByText('removed');
     expect(el.className).toContain('line-through');
-    expect(el.className).toContain('bg-red-500/20');
+    expect(el.className).toContain('bg-ghost-error/20');
   });
 
   it('hides insertions on original side', () => {
@@ -44,7 +44,7 @@ describe('DiffView', () => {
     render(<DiffView segments={segments} side="corrected" />);
     const el = screen.getByText('added');
     expect(el.className).toContain('underline');
-    expect(el.className).toContain('bg-green-500/20');
+    expect(el.className).toContain('bg-ghost-success/15');
   });
 
   it('hides deletions on corrected side', () => {

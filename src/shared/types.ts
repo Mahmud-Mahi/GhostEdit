@@ -1,7 +1,8 @@
 // ── Provider ──
 
-export type ProviderName = 'claude' | 'codex' | 'gemini' | 'local';
-export type CLIProviderName = Exclude<ProviderName, 'local'>;
+export type ProviderName = 'claude' | 'codex' | 'gemini' | 'local' | 'openai-compatible';
+export type CLIProviderName = 'claude' | 'codex' | 'gemini';
+export type OpenAICompatiblePreset = 'openai' | 'openrouter' | 'groq' | 'together' | 'ollama' | 'lm-studio' | 'custom' | 'claude' | 'codex' | 'gemini';
 
 export interface CLIProvider {
   name: CLIProviderName;
@@ -21,11 +22,15 @@ export interface AppConfig {
   geminiPath: string;
   provider: ProviderName;
   model: string;
+  apiPreset: OpenAICompatiblePreset;
+  apiBaseUrl: string;
+  apiModel: string;
   cliProvider: CLIProviderName;  // CLI provider for the Shift hotkey (e.g. 'claude')
   cliModel: string;              // Model for the CLI provider (e.g. 'sonnet')
   timeoutSeconds: number;
   localHotkeyAccelerator: string; // Electron accelerator for local model correction e.g. "CommandOrControl+E"
   cliHotkeyAccelerator: string; // Electron accelerator for CLI provider correction e.g. "CommandOrControl+Shift+E"
+  apiHotkeyAccelerator: string; // Electron accelerator for API correction e.g. "CommandOrControl+Alt+E"
   undoHotkeyAccelerator: string; // Electron accelerator for undo last correction e.g. "CommandOrControl+Shift+Z"
   launchAtLogin: boolean;
   historyLimit: number;
@@ -186,6 +191,14 @@ export interface BonsaiServerStatus {
   modelSize: BonsaiModelSize | null;
 }
 
+export interface StartupSetupStatus {
+  active: boolean;
+  stage: 'checking' | 'server' | 'model' | 'starting' | 'ready' | 'error';
+  progress: number | null;
+  message: string;
+  error?: string;
+}
+
 // ── IPC Channel Names ──
 
 export const IPC = {
@@ -203,6 +216,9 @@ export const IPC = {
   HUD_SHOW: 'hud-show',
   HUD_HIDE: 'hud-hide',
   GET_CLI_STATUS: 'get-cli-status',
+  GET_API_KEY: 'get-api-key',
+  SAVE_API_KEY: 'save-api-key',
+  GET_API_MODELS: 'get-api-models',
   ACCEPT_CORRECTION: 'accept-correction',
   REJECT_CORRECTION: 'reject-correction',
   REGENERATE_CORRECTION: 'regenerate-correction',
@@ -212,6 +228,7 @@ export const IPC = {
   DOWNLOAD_VARIANT_ERROR: 'download-variant-error',
   SET_PREVIEW_ORIGINAL: 'set-preview-original',
   SET_PREVIEW_CONFIG: 'set-preview-config',
+  PREVIEW_READY: 'preview-ready',
   INFERENCE_COMMAND: 'inference:command',
   INFERENCE_RESULT: 'inference:result',
   GET_INFERENCE_DEVICE: 'get-inference-device',
@@ -233,6 +250,9 @@ export const IPC = {
   DOWNLOAD_BONSAI_MODEL: 'download-bonsai-model',
   DOWNLOAD_BONSAI_PROGRESS: 'download-bonsai-progress',
   DOWNLOAD_BONSAI_ERROR: 'download-bonsai-error',
+  GET_STARTUP_SETUP_STATUS: 'get-startup-setup-status',
+  STARTUP_SETUP_STATUS: 'startup-setup-status',
+  START_LOCAL_MODEL_SETUP: 'start-local-model-setup',
 } as const;
 
 // ── Dictionary Checker ──

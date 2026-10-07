@@ -110,6 +110,18 @@ describe('registerGlobalShortcuts', () => {
     expect(cliHandler).toHaveBeenCalledTimes(1);
   });
 
+  it('registers and invokes the API handler when provided', async () => {
+    const { registerGlobalShortcuts } = await freshModule();
+    const apiHandler = vi.fn();
+
+    registerGlobalShortcuts(vi.fn(), vi.fn(), vi.fn(), vi.fn(), apiHandler);
+
+    expect(mockRegister).toHaveBeenCalledWith(DEFAULT_CONFIG.apiHotkeyAccelerator, apiHandler);
+    const registeredHandler = mockRegister.mock.calls.find(([accelerator]) => accelerator === DEFAULT_CONFIG.apiHotkeyAccelerator)?.[1];
+    registeredHandler();
+    expect(apiHandler).toHaveBeenCalledTimes(1);
+  });
+
   it('handles register() returning false (logs error, no crash)', async () => {
     mockRegister.mockReturnValue(false);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

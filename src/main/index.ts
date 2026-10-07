@@ -15,7 +15,7 @@ import * as clipboardManager from './clipboard-manager';
 import { getCached, putCache, clearCache } from './correction-cache';
 import { TONE_PROMPTS } from '../shared/constants';
 import type { ProviderName } from '../shared/types';
-import { IPC, type WindowType, type CorrectionHistoryEntry } from '../shared/types';
+import { IPC, type WindowType, type CorrectionHistoryEntry, type StartupSetupStatus } from '../shared/types';
 import { errorToUserMessage, errorToUserInfo } from './error-messages';
 import { clearDeviceCache } from './device-selector';
 import { playSuccessSound, playErrorSound } from './sound-manager';
@@ -39,6 +39,80 @@ if (!gotLock) {
 
 // ── Window Management ──
 const windows = new Map<WindowType, BrowserWindow>();
+const previewReadyWebContents = new Set<number>();
+const previewReadyWaiters = new Map<number, () => void>();
+let startupSetupStatus: StartupSetupStatus = {
+  active: false,
+  stage: 'ready',
+  progress: null,
+  message: 'Ready',
+};
+let startupSetupPromise: Promise<void> | null = null;
+
+function publishStartupSetupStatus(status: StartupSetupStatus): void {
+  startupSetupStatus = status;
+  for (const win of windows.values()) {
+    if (!win.isDestroyed()) win.webContents.send(IPC.STARTUP_SETUP_STATUS, status);
+  }
+}
+
+function runStartupSetup(): Promise<void> {
+  if (startupSetupPromise) return startupSetupPromise;
+  startupSetupPromise = (async () => {
+    const config = configManager.load();
+    publishStartupSetupStatus({ active: true, stage: 'checking', progress: null, message: 'Checking for the latest local model components' });
+    try {
+      await ensureLlamaServer(config.bonsaiModelSize, ({ stage, progress }) => {
+        const messages = {
+          server: progress === null ? 'Checking the bundled llama.cpp server' : 'Using the bundled llama.cpp server',
+          model: progress === null ? 'Checking and downloading the Bonsai model' : 'Downloading the Bonsai model',
+          starting: 'Starting the local model server',
+        };
+        publishStartupSetupStatus({ active: true, stage, progress, message: messages[stage] });
+      });
+      publishStartupSetupStatus({ active: false, stage: 'ready', progress: 100, message: 'Setup complete' });
+    } catch (error) {
+      publishStartupSetupStatus({
+        active: true,
+        stage: 'error',
+        progress: null,
+        message: 'Could not finish downloading the local model',
+        error: (error as Error).message,
+      });
+    }
+  })().finally(() => {
+    startupSetupPromise = null;
+  });
+  return startupSetupPromise;
+}
+
+ipcMain.on(IPC.PREVIEW_READY, (event) => {
+  const webContentsId = event.sender.id;
+  previewReadyWebContents.add(webContentsId);
+  previewReadyWaiters.get(webContentsId)?.();
+  event.sender.once('destroyed', () => previewReadyWebContents.delete(webContentsId));
+});
+
+function waitForPreviewReady(win: BrowserWindow): Promise<void> {
+  const contents = win.webContents;
+  const webContentsId = contents.id;
+  if (previewReadyWebContents.has(webContentsId)) return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => finish(new Error('Preview renderer did not become ready')), 10000);
+    const onDestroyed = () => finish(new Error('Preview window was closed before becoming ready'));
+    const finish = (error?: Error) => {
+      clearTimeout(timeout);
+      previewReadyWaiters.delete(webContentsId);
+      contents.removeListener('destroyed', onDestroyed);
+      if (error) reject(error);
+      else resolve();
+    };
+
+    previewReadyWaiters.set(webContentsId, () => finish());
+    contents.once('destroyed', onDestroyed);
+  });
+}
 
 function getPreloadPath(): string {
   return path.join(__dirname, '../preload/index.js');
@@ -283,7 +357,7 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
 
   const config = configManager.load();
   const effectiveConfig = providerOverride
-    ? { ...config, provider: providerOverride, model: modelOverride ?? (providerOverride === 'local' ? (config.localModelEngine === 'bonsai' ? `bonsai-${config.bonsaiModelSize}` : 't5-grammar') : config.model) }
+    ? { ...config, provider: providerOverride, model: modelOverride ?? (providerOverride === 'local' ? (config.localModelEngine === 'bonsai' ? `bonsai-${config.bonsaiModelSize}` : 't5-grammar') : providerOverride === 'openai-compatible' ? config.apiModel : config.model) }
     : config;
   const startTime = Date.now();
   let snap: ReturnType<typeof clipboardManager.snapshot> | null = null;
@@ -363,15 +437,7 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
 
       // Show interactive diff preview — wait for user decision
       const previewWin = openWindow('streaming-preview');
-      await new Promise<void>((resolve) => {
-        if (previewWin.webContents.isLoading()) {
-          previewWin.webContents.once('did-finish-load', () => resolve());
-        } else {
-          resolve();
-        }
-      });
-      // Wait for React to mount and register IPC listeners
-      await new Promise((r) => setTimeout(r, 150));
+      await waitForPreviewReady(previewWin);
       previewWin.webContents.send(IPC.SET_PREVIEW_ORIGINAL, selectedText);
       previewWin.webContents.send(IPC.STREAMING_DONE, correctedText);
       previewWin.webContents.send(IPC.SET_PREVIEW_CONFIG, {
@@ -446,8 +512,8 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
       // Show passive preview overlay (non-focusable, auto-closes)
       const passiveWin = openPassivePreviewWindow();
       const sendPassiveData = () => {
-        // Wait for React to mount and register IPC listeners
-        setTimeout(() => {
+        void waitForPreviewReady(passiveWin).then(() => {
+          if (passiveWin.isDestroyed()) return;
           passiveWin.webContents.send(IPC.SET_PREVIEW_ORIGINAL, selectedText);
           passiveWin.webContents.send(IPC.STREAMING_DONE, correctedText);
           passiveWin.webContents.send(IPC.SET_PREVIEW_CONFIG, {
@@ -456,7 +522,9 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
             passivePreviewSeconds: config.passivePreviewSeconds,
           });
           passiveWin.showInactive();
-        }, 150);
+        }).catch((err) => {
+          console.error('[GhostEdit] Passive preview failed to become ready:', err.message);
+        });
       };
 
       if (passiveWin.webContents.isLoading()) {
@@ -783,6 +851,12 @@ app.whenReady().then(() => {
 
   registerIPCHandlers(openWindow);
 
+  ipcMain.handle(IPC.GET_STARTUP_SETUP_STATUS, () => startupSetupStatus);
+  ipcMain.handle(IPC.START_LOCAL_MODEL_SETUP, async () => {
+    await runStartupSetup();
+    return { success: startupSetupStatus.stage === 'ready' };
+  });
+
   // Cross-platform window controls (for non-macOS title bar buttons)
   ipcMain.on('window-close', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();
@@ -818,6 +892,10 @@ app.whenReady().then(() => {
       const c = configManager.load();
       performCorrection(c.cliProvider, c.cliModel);
     },
+    onCorrectAPI: () => {
+      const c = configManager.load();
+      performCorrection('openai-compatible', c.apiModel);
+    },
     onUndoLastCorrection: () => undoLastCorrection(),
     onOpenSettings: () => openWindow('settings'),
     onOpenHistory: () => openWindow('history'),
@@ -845,6 +923,10 @@ app.whenReady().then(() => {
     },
     () => undoLastCorrection(),
     () => correctCurrentLine(),
+    () => {
+      const c = configManager.load();
+      performCorrection('openai-compatible', c.apiModel);
+    },
   );
 
   // Start real-time monitoring if enabled
@@ -853,8 +935,10 @@ app.whenReady().then(() => {
   // Pre-warm the local model in the background (Feature 7: faster cold start)
   setTimeout(() => {
     const cfg = configManager.load();
+    if (!cfg.firstRunComplete) return;
+    if (cfg.provider !== 'local') return;
     if (cfg.provider === 'local' && cfg.localModelEngine === 'bonsai') {
-      ensureLlamaServer(cfg.bonsaiModelSize).catch((err) => {
+      void runStartupSetup().catch((err) => {
         console.warn('[GhostEdit] Bonsai pre-warm failed:', err.message);
       });
     } else {
@@ -881,6 +965,10 @@ app.whenReady().then(() => {
       },
       () => undoLastCorrection(),
       () => correctCurrentLine(),
+      () => {
+        const c = configManager.load();
+        performCorrection('openai-compatible', c.apiModel);
+      },
     );
 
     // Restart monitoring if config changed (enabled/disabled/position change)

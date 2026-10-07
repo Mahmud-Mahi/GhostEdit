@@ -6,7 +6,8 @@ import * as os from 'os';
 import { app } from 'electron';
 import type { BonsaiModelSize, BonsaiServerStatus } from '../shared/types';
 import { LLAMA_SERVER_CONFIG } from '../shared/constants';
-import { getBonsaiModelPath } from './bonsai-model-manager';
+import { downloadBonsaiModel, getBonsaiModelPath } from './bonsai-model-manager';
+import { ensureLlamaServerRuntime, getBundledLlamaServerPath } from './llama-runtime-manager';
 
 // ── Module State ──
 
@@ -15,6 +16,11 @@ let serverPort: number | null = null;
 let currentModelSize: BonsaiModelSize | null = null;
 let serverHealthy = false;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+export interface LlamaServerSetupProgress {
+  stage: 'server' | 'model' | 'starting';
+  progress: number | null;
+}
 
 // ── Paths ──
 
@@ -31,13 +37,7 @@ function getLogFilePath(): string {
 }
 
 export function getLlamaServerBinaryPath(): string {
-  const binaryName = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server';
-  const platformArch = `${process.platform}-${process.arch}`;
-
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'bin', platformArch, binaryName);
-  }
-  return path.join(app.getAppPath(), 'resources', 'bin', platformArch, binaryName);
+  return getBundledLlamaServerPath();
 }
 
 // ── Port Allocation ──
@@ -125,14 +125,22 @@ function killOrphanedServer(): void {
 
 // ── Start / Stop ──
 
-export async function startLlamaServer(modelSize: BonsaiModelSize): Promise<void> {
+export async function startLlamaServer(
+  modelSize: BonsaiModelSize,
+  onProgress?: (progress: LlamaServerSetupProgress) => void,
+): Promise<void> {
   // Kill any orphaned server from a previous app session
   killOrphanedServer();
 
-  const binaryPath = getLlamaServerBinaryPath();
-  if (!fs.existsSync(binaryPath)) {
-    throw new Error(`llama-server binary not found at ${binaryPath}`);
-  }
+  onProgress?.({ stage: 'server', progress: null });
+  const binaryPath = await ensureLlamaServerRuntime((progress) => {
+    onProgress?.({ stage: 'server', progress });
+  });
+
+  onProgress?.({ stage: 'model', progress: null });
+  await downloadBonsaiModel(modelSize, (progress) => {
+    onProgress?.({ stage: 'model', progress });
+  });
 
   const modelPath = getBonsaiModelPath(modelSize);
   if (!modelPath) {
@@ -140,6 +148,7 @@ export async function startLlamaServer(modelSize: BonsaiModelSize): Promise<void
   }
 
   const port = await findFreePort();
+  onProgress?.({ stage: 'starting', progress: null });
   const logPath = getLogFilePath();
   fs.mkdirSync(getDataDir(), { recursive: true });
   const logFd = fs.openSync(logPath, 'w');
@@ -155,8 +164,20 @@ export async function startLlamaServer(modelSize: BonsaiModelSize): Promise<void
   ];
 
   // Not detached: server dies with the app (prevents orphans)
+  const serverEnv = { ...process.env };
+  if (process.platform === 'linux') {
+    serverEnv.LD_LIBRARY_PATH = [path.dirname(binaryPath), process.env.LD_LIBRARY_PATH]
+      .filter(Boolean)
+      .join(path.delimiter);
+  } else if (process.platform === 'darwin') {
+    serverEnv.DYLD_LIBRARY_PATH = [path.dirname(binaryPath), process.env.DYLD_LIBRARY_PATH]
+      .filter(Boolean)
+      .join(path.delimiter);
+  }
+
   const child = spawn(binaryPath, args, {
     stdio: ['ignore', logFd, logFd],
+    env: serverEnv,
   });
 
   fs.closeSync(logFd);
@@ -242,7 +263,10 @@ export async function stopLlamaServer(): Promise<void> {
   deletePidFile();
 }
 
-export async function ensureLlamaServer(modelSize: BonsaiModelSize): Promise<number> {
+export async function ensureLlamaServer(
+  modelSize: BonsaiModelSize,
+  onProgress?: (progress: LlamaServerSetupProgress) => void,
+): Promise<number> {
   // Already running with correct model
   if (serverProcess && serverHealthy && currentModelSize === modelSize && serverPort) {
     return serverPort;
@@ -253,7 +277,7 @@ export async function ensureLlamaServer(modelSize: BonsaiModelSize): Promise<num
     await stopLlamaServer();
   }
 
-  await startLlamaServer(modelSize);
+  await startLlamaServer(modelSize, onProgress);
   return serverPort!;
 }
 

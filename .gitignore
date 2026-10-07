@@ -6,3 +6,4 @@ out/
 .DS_Store
 resources/models/
 resources/bin/
+.vscode/

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Collect registered handlers
 const handlers: Record<string, Function> = {};
 const mockEmit = vi.fn();
+const mockDownloadBonsaiModel = vi.fn();
 
 // Mock electron
 vi.mock('electron', () => ({
@@ -51,7 +52,7 @@ vi.mock('./cli-arguments', () => ({
 
 vi.mock('./bonsai-model-manager', () => ({
   scanBonsaiModels: vi.fn(() => []),
-  downloadBonsaiModel: vi.fn(),
+  downloadBonsaiModel: (...args: any[]) => mockDownloadBonsaiModel(...args),
 }));
 
 vi.mock('./llama-server-manager', () => ({
@@ -69,8 +70,9 @@ import { IPC } from '../shared/types';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockDownloadBonsaiModel.mockReset();
   Object.keys(handlers).forEach((k) => delete handlers[k]);
-  mockConfigLoad.mockReturnValue({ localModelVariant: 'q4f16', localModelEngine: 'bonsai', bonsaiModelSize: '1.7b' });
+  mockConfigLoad.mockReturnValue({ localModelVariant: 'q4f16', localModelEngine: 'bonsai', bonsaiModelSize: '1.7b' } as any);
   registerIPCHandlers(vi.fn());
 });
 
@@ -93,6 +95,18 @@ describe('GET_LOCAL_MODEL_STATUS handler', () => {
     expect(result.t5).toEqual({ ready: true, activeVariant: 'q4f16', variants: [] });
     expect(result.bonsai).toBeDefined();
     expect(result.bonsai.models).toEqual([]);
+  });
+});
+
+describe('DOWNLOAD_BONSAI_MODEL handler', () => {
+  it('forwards model download progress to the renderer', async () => {
+    mockDownloadBonsaiModel.mockImplementation(async (_size, onProgress) => onProgress(42));
+    const event = createMockEvent();
+
+    const result = await handlers[IPC.DOWNLOAD_BONSAI_MODEL](event, '4b');
+
+    expect(result).toEqual({ success: true });
+    expect(event.sender.send).toHaveBeenCalledWith(IPC.DOWNLOAD_BONSAI_PROGRESS, { size: '4b', progress: 42 });
   });
 });
 
@@ -195,5 +209,30 @@ describe('CORRECT_TEXT_STREAMING handler', () => {
 
     expect(result.success).toBe(true);
     expect(event.sender.send).toHaveBeenCalledWith(IPC.STREAMING_CHUNK, 'hello');
+  });
+});
+
+describe('CORRECT_INLINE handler', () => {
+  it('uses the selected API provider instead of forcing local Bonsai', async () => {
+    const { correctText } = await import('./correction-dispatcher');
+    mockConfigLoad.mockReturnValue({
+      provider: 'openai-compatible',
+      apiPreset: 'gemini',
+      apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      apiModel: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash',
+      localModelEngine: 'bonsai',
+      bonsaiModelSize: '1.7b',
+    } as any);
+    vi.mocked(correctText).mockResolvedValue({ text: 'corrected through Gemini', durationMs: 10 });
+
+    const result = await handlers[IPC.CORRECT_INLINE]({}, 'input text');
+
+    expect(correctText).toHaveBeenCalledWith(expect.any(String), 'input text', expect.objectContaining({
+      provider: 'openai-compatible',
+      apiPreset: 'gemini',
+      model: 'gemini-2.5-flash',
+    }));
+    expect(result).toEqual({ success: true, text: 'corrected through Gemini' });
   });
 });

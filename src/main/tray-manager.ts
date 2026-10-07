@@ -17,6 +17,7 @@ let storedCallbacks: TrayCallbacks | null = null;
 export interface TrayCallbacks {
   onCorrectLocal: () => void;
   onCorrectCLI: () => void;
+  onCorrectAPI?: () => void;
   onUndoLastCorrection: () => void;
   onOpenSettings: () => void;
   onOpenHistory: () => void;
@@ -265,6 +266,10 @@ export function updateMenu(callbacks: TrayCallbacks): void {
       label: `Correct (${cliProviderDef?.displayName ?? 'CLI'}) (${formatAccelerator(config.cliHotkeyAccelerator)})`,
       click: callbacks.onCorrectCLI,
     },
+    ...(callbacks.onCorrectAPI ? [{
+      label: `Correct (API) (${formatAccelerator(config.apiHotkeyAccelerator)})`,
+      click: callbacks.onCorrectAPI,
+    } as Electron.MenuItemConstructorOptions] : []),
     { type: 'separator' },
     {
       label: `Undo Last Correction (${formatAccelerator(config.undoHotkeyAccelerator)})`,

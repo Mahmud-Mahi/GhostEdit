@@ -1,4 +1,4 @@
-import type { AppConfig, CLIProvider, TonePreset, ProviderName, LocalModelVariant, BonsaiModelSize, DiffPreviewMode, IconPosition } from './types';
+import type { AppConfig, CLIProvider, TonePreset, ProviderName, LocalModelVariant, BonsaiModelSize, DiffPreviewMode, IconPosition, OpenAICompatiblePreset } from './types';
 
 // ── CLI Provider Definitions ──
 
@@ -32,6 +32,19 @@ export const CLI_PROVIDERS: Record<string, CLIProvider> = {
   },
 };
 
+export const API_PRESETS: Record<OpenAICompatiblePreset, { displayName: string; baseUrl: string; model: string }> = {
+  openai: { displayName: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1-mini' },
+  openrouter: { displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4.1-mini' },
+  groq: { displayName: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+  together: { displayName: 'Together AI', baseUrl: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo' },
+  ollama: { displayName: 'Ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3.2' },
+  'lm-studio': { displayName: 'LM Studio', baseUrl: 'http://localhost:1234/v1', model: 'local-model' },
+  custom: { displayName: 'Custom', baseUrl: '', model: '' },
+  claude: { displayName: 'Claude (Anthropic API)', baseUrl: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5' },
+  codex: { displayName: 'Codex (OpenAI API)', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5-codex' },
+  gemini: { displayName: 'Gemini (Google API)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash' },
+};
+
 // ── Local Provider Definition ──
 
 export const LOCAL_PROVIDER = {
@@ -48,6 +61,12 @@ export const ALL_PROVIDERS: Record<string, { name: ProviderName; displayName: st
   ...Object.fromEntries(
     Object.entries(CLI_PROVIDERS).map(([key, p]) => [key, { name: p.name, displayName: p.displayName, availableModels: p.availableModels, defaultModel: p.defaultModel }]),
   ),
+  'openai-compatible': {
+    name: 'openai-compatible',
+    displayName: 'OpenAI Compatible',
+    availableModels: [],
+    defaultModel: API_PRESETS.openai.model,
+  },
   local: LOCAL_PROVIDER,
 };
 
@@ -112,6 +131,9 @@ export const DEFAULT_CONFIG: AppConfig = {
   geminiPath: '',
   provider: 'local',
   model: 'bonsai-1.7b',
+  apiPreset: 'openai',
+  apiBaseUrl: API_PRESETS.openai.baseUrl,
+  apiModel: API_PRESETS.openai.model,
   localModelEngine: 'bonsai',
   bonsaiModelSize: '1.7b',
   cliProvider: 'claude',
@@ -119,6 +141,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   timeoutSeconds: 60,
   localHotkeyAccelerator: 'CommandOrControl+E',
   cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+  apiHotkeyAccelerator: 'CommandOrControl+Alt+E',
   undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
   launchAtLogin: false,
   historyLimit: 50,

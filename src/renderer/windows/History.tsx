@@ -140,7 +140,7 @@ export default function History() {
             </button>
             <button
               onClick={() => window.ghostedit.windowControls.close()}
-              className="w-8 h-8 flex items-center justify-center rounded hover:bg-red-500/80 hover:text-white text-ghost-muted"
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-ghost-error/80 hover:text-white text-ghost-muted"
               aria-label="Close"
             >
               <svg width={12} height={12} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round"><path d="M2 2l8 8M10 2l-8 8" /></svg>
@@ -184,21 +184,21 @@ export default function History() {
             <div className="flex items-center gap-1">
               <button
                 onClick={() => handleExport('json')}
-                className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1"
+                className="text-xs text-ghost-cyan hover:text-ghost-purple px-2 py-1"
                 title="Export as JSON"
               >
                 JSON
               </button>
               <button
                 onClick={() => handleExport('csv')}
-                className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1"
+                className="text-xs text-ghost-cyan hover:text-ghost-purple px-2 py-1"
                 title="Export as CSV"
               >
                 CSV
               </button>
               <button
                 onClick={handleClear}
-                className="text-xs text-ghost-error hover:text-red-300 px-2 py-1"
+                className="text-xs text-ghost-error hover:text-ghost-error/80 px-2 py-1"
               >
                 Clear All
               </button>
@@ -225,7 +225,7 @@ export default function History() {
                         entry.succeeded
                           ? 'bg-ghost-success/20 text-ghost-success'
                           : entry.rejected
-                            ? 'bg-yellow-500/20 text-yellow-400'
+                            ? 'bg-ghost-warning/20 text-ghost-warning'
                             : 'bg-ghost-error/20 text-ghost-error'
                       }`}
                     >
@@ -254,7 +254,7 @@ export default function History() {
                         onClick={() => setShowDiff(!showDiff)}
                         className={`text-xs font-medium px-2.5 py-1 rounded-lg transition-colors ${
                           showDiff
-                            ? 'bg-blue-500/20 text-blue-400'
+                            ? 'bg-ghost-purple/20 text-ghost-purple'
                             : 'bg-white/5 text-ghost-muted hover:text-white/70'
                         }`}
                       >
@@ -294,7 +294,7 @@ export default function History() {
                           <h3 className="text-xs font-medium text-ghost-muted uppercase">Original</h3>
                           <button
                             onClick={() => handleCopy(selected.originalText, 'original')}
-                            className="text-xs text-blue-400 hover:text-blue-300 px-1.5 py-0.5"
+                            className="text-xs text-ghost-cyan hover:text-ghost-purple px-1.5 py-0.5"
                           >
                             {copied === 'original' ? 'Copied!' : 'Copy'}
                           </button>
@@ -308,7 +308,7 @@ export default function History() {
                           <h3 className="text-xs font-medium text-ghost-muted uppercase">Corrected</h3>
                           <button
                             onClick={() => handleCopy(selected.generatedText, 'corrected')}
-                            className="text-xs text-blue-400 hover:text-blue-300 px-1.5 py-0.5"
+                            className="text-xs text-ghost-cyan hover:text-ghost-purple px-1.5 py-0.5"
                           >
                             {copied === 'corrected' ? 'Copied!' : 'Copy'}
                           </button>
@@ -324,14 +324,14 @@ export default function History() {
                   {reCorrectResult && (
                     <div className="space-y-2 border-t border-white/10 pt-3">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-xs font-medium text-blue-400 uppercase">Re-corrected</h3>
+                        <h3 className="text-xs font-medium text-ghost-cyan uppercase">Re-corrected</h3>
                         <button
                           onClick={() => {
                             navigator.clipboard.writeText(reCorrectResult);
                             setCopied('corrected');
                             setTimeout(() => setCopied(null), 1500);
                           }}
-                          className="text-xs text-blue-400 hover:text-blue-300 px-1.5 py-0.5"
+                          className="text-xs text-ghost-cyan hover:text-ghost-purple px-1.5 py-0.5"
                         >
                           {copied === 'corrected' ? 'Copied!' : 'Copy'}
                         </button>
