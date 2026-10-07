@@ -182,22 +182,23 @@ describe('updateMenu', () => {
     expect(hasCliCorrect).toBe(true);
   });
 
-  it('exposes a tray action to download the local model', async () => {
+  it('exposes a tray action for API correction', async () => {
     const { createTray } = await freshModule();
-    const onDownloadLocalModel = vi.fn();
+    const onCorrectAPI = vi.fn();
     createTray({
       onCorrectLocal: vi.fn(),
       onCorrectCLI: vi.fn(),
+      onCorrectAPI,
       onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
-      onDownloadLocalModel,
     });
 
-    const downloadItem = capturedMenuTemplate.find((item: any) => item.label === 'Download Local Model...');
-    expect(downloadItem).toBeDefined();
-    downloadItem.click();
-    expect(onDownloadLocalModel).toHaveBeenCalledTimes(1);
+    const apiItem = capturedMenuTemplate.find((item: any) => item.label?.includes('Correct (API)'));
+    expect(apiItem).toBeDefined();
+    apiItem.click();
+    expect(onCorrectAPI).toHaveBeenCalledTimes(1);
+    expect(capturedMenuTemplate.some((item: any) => item.label === 'Download Local Model...')).toBe(false);
   });
 
   it('local correction label includes formatted localHotkeyAccelerator', async () => {

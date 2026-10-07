@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { IPC } from './types';
 import type { ProviderName, CLIProviderName, CorrectionResult, LocalModelInfo, LocalModelVariant, LocalModelVariantInfo, AppConfig, DiffPreviewMode } from './types';
+import { DEFAULT_CONFIG } from './constants';
 
 describe('ProviderName type', () => {
   it('includes local', () => {
@@ -9,8 +10,8 @@ describe('ProviderName type', () => {
   });
 
   it('includes CLI providers', () => {
-    const providers: ProviderName[] = ['claude', 'codex', 'gemini', 'local'];
-    expect(providers).toHaveLength(4);
+    const providers: ProviderName[] = ['claude', 'codex', 'gemini', 'local', 'openai-compatible'];
+    expect(providers).toHaveLength(5);
   });
 });
 
@@ -86,6 +87,7 @@ describe('IPC channels', () => {
 describe('AppConfig type', () => {
   it('includes firstRunComplete field', () => {
     const config: AppConfig = {
+      ...DEFAULT_CONFIG,
       claudePath: '',
       codexPath: '',
       geminiPath: '',
@@ -134,6 +136,7 @@ describe('AppConfig type', () => {
 
   it('has localHotkeyAccelerator and cliHotkeyAccelerator fields', () => {
     const config: AppConfig = {
+      ...DEFAULT_CONFIG,
       claudePath: '',
       codexPath: '',
       geminiPath: '',
@@ -182,6 +185,7 @@ describe('AppConfig type', () => {
 
   it('does NOT have a hotkeyAccelerator field in the type', () => {
     const config: AppConfig = {
+      ...DEFAULT_CONFIG,
       claudePath: '',
       codexPath: '',
       geminiPath: '',

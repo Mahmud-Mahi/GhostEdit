@@ -1,6 +1,8 @@
 import { correctText as correctTextCLI, correctTextStreaming as correctTextStreamingCLI } from './cli-runner';
 import { correctTextLocal, correctTextLocalStreaming } from './local-model-runner';
 import { correctTextBonsai, correctTextBonsaiStreaming } from './bonsai-inference';
+import { correctTextOpenAICompatible, correctTextOpenAICompatibleStreaming } from './openai-compatible-runner';
+import { loadApiKey } from './api-key-store';
 import type { AppConfig, CorrectionResult } from '../shared/types';
 
 export async function correctText(
@@ -13,6 +15,9 @@ export async function correctText(
       return correctTextLocal(systemPrompt, text);
     }
     return correctTextBonsai(systemPrompt, text);
+  }
+  if (config.provider === 'openai-compatible') {
+    return correctTextOpenAICompatible(systemPrompt, text, config, loadApiKey());
   }
   return correctTextCLI(systemPrompt, text, config);
 }
@@ -28,6 +33,9 @@ export async function correctTextStreaming(
       return correctTextLocalStreaming(systemPrompt, text, onChunk);
     }
     return correctTextBonsaiStreaming(systemPrompt, text, onChunk);
+  }
+  if (config.provider === 'openai-compatible') {
+    return correctTextOpenAICompatibleStreaming(systemPrompt, text, onChunk, config, loadApiKey());
   }
   return correctTextStreamingCLI(systemPrompt, text, onChunk, config);
 }

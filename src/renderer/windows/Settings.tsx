@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import type { AppConfig, CLIProviderName, TonePreset, DiffPreviewMode, LocalModelInfo, LocalModelVariant, LocalModelEngine, BonsaiModelSize, BonsaiModelInfo, BonsaiServerStatus, UsageStats } from '../../shared/types';
-import { CLI_PROVIDERS, LANGUAGES, DEFAULT_CONFIG, DEFAULT_BUNDLED_VARIANT, BONSAI_MODELS, TONE_PROMPTS } from '../../shared/constants';
+import type { AppConfig, CLIProviderName, TonePreset, DiffPreviewMode, BonsaiModelSize, BonsaiModelInfo, BonsaiServerStatus, UsageStats, OpenAICompatiblePreset } from '../../shared/types';
+import { CLI_PROVIDERS, API_PRESETS, LANGUAGES, DEFAULT_CONFIG, BONSAI_MODELS, TONE_PROMPTS } from '../../shared/constants';
 import HotkeyInput from '../components/HotkeyInput';
 import Welcome from '../components/Welcome';
 
@@ -16,8 +16,8 @@ const SECTIONS: Array<{
   icon: React.ReactNode;
 }> = [
   { id: 'general',    label: 'General',    title: 'General',    subtitle: 'Language, tone, and correction preferences', icon: <GearIcon /> },
-  { id: 'models',     label: 'Models',     title: 'Models',     subtitle: 'Local model engine configuration',            icon: <ChipIcon /> },
-  { id: 'providers',  label: 'Providers',  title: 'Providers',  subtitle: 'CLI provider and API configuration',         icon: <CloudIcon /> },
+  { id: 'models',     label: 'Local Model', title: 'Local Model', subtitle: 'Offline correction engine configuration',    icon: <ChipIcon /> },
+  { id: 'providers',  label: 'Providers',  title: 'Providers',  subtitle: 'CLI tools and OpenAI-compatible API configuration', icon: <CloudIcon /> },
   { id: 'hotkeys',    label: 'Hotkeys',    title: 'Hotkeys',    subtitle: 'Keyboard shortcuts for corrections',         icon: <KeyboardIcon /> },
   { id: 'behavior',   label: 'Behavior',   title: 'Behavior',   subtitle: 'Correction workflow and notifications',      icon: <SlidersIcon /> },
   { id: 'monitoring', label: 'Monitoring', title: 'Real-Time Monitoring', subtitle: 'Passive text analysis and traffic light indicator', icon: <EyeIcon /> },
@@ -35,15 +35,18 @@ export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>('general');
   const [cliStatus, setCLIStatus] = useState<Record<string, { found: boolean; path: string | null }>>({});
   const [saved, setSaved] = useState(false);
-  const [modelInfo, setModelInfo] = useState<LocalModelInfo>({ ready: false, activeVariant: DEFAULT_BUNDLED_VARIANT, variants: [] });
-  const [downloadingVariant, setDownloadingVariant] = useState<LocalModelVariant | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [bonsaiModels, setBonsaiModels] = useState<BonsaiModelInfo[]>([]);
   const [downloadingBonsai, setDownloadingBonsai] = useState<BonsaiModelSize | null>(null);
   const [bonsaiDownloadProgress, setBonsaiDownloadProgress] = useState(0);
   const [bonsaiDownloadError, setBonsaiDownloadError] = useState<string | null>(null);
+  const [bonsaiDownloadErrorSize, setBonsaiDownloadErrorSize] = useState<BonsaiModelSize | null>(null);
   const [inferenceDevice, setInferenceDevice] = useState<{ device: string; runtime: string; label: string } | null>(null);
+  const [apiKey, setApiKey] = useState('');
+  const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [apiModels, setApiModels] = useState<string[]>([]);
+  const [loadingApiModels, setLoadingApiModels] = useState(false);
+  const [apiModelsError, setApiModelsError] = useState<string | null>(null);
 
   // Prompt editor state
   const [systemPrompt, setSystemPrompt] = useState('');
@@ -72,42 +75,34 @@ export default function Settings() {
   useEffect(() => {
     const removeStartupListener = window.ghostedit.onStartupSetupStatus(setStartupSetup);
     window.ghostedit.getStartupSetupStatus().then(setStartupSetup);
-    window.ghostedit.getConfig().then(setConfig);
+    window.ghostedit.getConfig().then((loaded) => {
+      const normalized = loaded.localModelEngine === 't5'
+        ? { ...loaded, localModelEngine: 'bonsai' as const, model: `bonsai-${loaded.bonsaiModelSize ?? '1.7b'}` }
+        : loaded;
+      setConfig(normalized);
+      if (normalized !== loaded) void window.ghostedit.saveConfig(normalized);
+    });
+    window.ghostedit.getApiKey()
+      .then(setApiKey)
+      .catch((err: unknown) => setApiKeyError(err instanceof Error ? err.message : String(err)));
     window.ghostedit.getCLIStatus().then(setCLIStatus);
-    window.ghostedit.getLocalModelStatus().then(setModelInfo);
     window.ghostedit.getInferenceDevice().then(setInferenceDevice);
     window.ghostedit.getBonsaiStatus().then((s) => setBonsaiModels(s.models));
+    const removeBonsaiProgressListener = window.ghostedit.onDownloadBonsaiProgress(({ size, progress }) => {
+      setDownloadingBonsai(size);
+      setBonsaiDownloadProgress(progress);
+    });
+    const removeBonsaiErrorListener = window.ghostedit.onDownloadBonsaiError(({ size, error }) => {
+      setBonsaiDownloadError(error);
+      setBonsaiDownloadErrorSize(size);
+    });
 
-    const removeProgressListener = window.ghostedit.onDownloadVariantProgress((data) => {
-      setDownloadProgress(data.progress);
-    });
-    const removeErrorListener = window.ghostedit.onDownloadVariantError((data) => {
-      setDownloadError(data.error);
-    });
-    const removeBonsaiProgressListener = window.ghostedit.onDownloadBonsaiProgress((data) => {
-      setBonsaiDownloadProgress(data.progress);
-    });
-    const removeBonsaiErrorListener = window.ghostedit.onDownloadBonsaiError((data) => {
-      setBonsaiDownloadError(data.error);
-    });
     return () => {
       removeStartupListener();
-      removeProgressListener();
-      removeErrorListener();
       removeBonsaiProgressListener();
       removeBonsaiErrorListener();
     };
   }, []);
-
-  const handleStartLocalModelSetup = useCallback(async () => {
-    if (retryingStartupSetup) return;
-    setRetryingStartupSetup(true);
-    try {
-      await window.ghostedit.startLocalModelSetup();
-    } finally {
-      setRetryingStartupSetup(false);
-    }
-  }, [retryingStartupSetup]);
 
   // Load section-specific data when switching
   useEffect(() => {
@@ -122,6 +117,30 @@ export default function Settings() {
       window.ghostedit.getUsageStats().then(setStats);
     }
   }, [activeSection]);
+
+  const handleLoadApiModels = useCallback(async () => {
+    setLoadingApiModels(true);
+    setApiModelsError(null);
+    try {
+      const result = await window.ghostedit.getApiModels();
+      if (!result.success) {
+        setApiModels([]);
+        setApiModelsError(result.error || 'Could not load models from this host');
+        return;
+      }
+      setApiModels(result.models);
+      setApiModelsError(null);
+    } catch (err) {
+      setApiModels([]);
+      setApiModelsError(err instanceof Error ? err.message : 'Could not load models from this host');
+    } finally {
+      setLoadingApiModels(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeSection === 'providers') void handleLoadApiModels();
+  }, [activeSection, config.apiBaseUrl, handleLoadApiModels]);
 
   const save = useCallback(async (updated: AppConfig) => {
     setConfig(updated);
@@ -138,6 +157,20 @@ export default function Settings() {
     }
   }, [config, save]);
 
+  const handleWelcomeConfigUpdate = useCallback(async (updates: Partial<AppConfig>) => {
+    await save({ ...config, ...updates });
+  }, [config, save]);
+
+  const handleRetryStartupSetup = useCallback(async () => {
+    if (retryingStartupSetup) return;
+    setRetryingStartupSetup(true);
+    try {
+      await window.ghostedit.startLocalModelSetup();
+    } finally {
+      setRetryingStartupSetup(false);
+    }
+  }, [retryingStartupSetup]);
+
   const update = useCallback(
     (partial: Partial<AppConfig>) => {
       setConfig((prev) => {
@@ -149,44 +182,35 @@ export default function Settings() {
     [save],
   );
 
-  const handleDownloadVariant = useCallback(async (variant: LocalModelVariant) => {
-    if (downloadingVariant) return;
-    setDownloadingVariant(variant);
-    setDownloadProgress(0);
-    setDownloadError(null);
-    try {
-      const result = await window.ghostedit.downloadModelVariant(variant);
-      if (result.success) {
-        const info = await window.ghostedit.getLocalModelStatus();
-        setModelInfo(info);
-        setDownloadError(null);
-      } else {
-        setDownloadError(result.error || 'Download failed');
-      }
-    } catch (err: any) {
-      setDownloadError(err?.message || 'Download failed');
-    } finally {
-      setDownloadingVariant(null);
-      setDownloadProgress(0);
+
+  const handleSaveApiKey = useCallback(async () => {
+    const result = await window.ghostedit.saveApiKey(apiKey);
+    setApiKeyError(result.success ? null : result.error || 'Could not save API key');
+    setApiKeySaved(result.success);
+    if (result.success) {
+      setTimeout(() => setApiKeySaved(false), 1500);
+      void handleLoadApiModels();
     }
-  }, [downloadingVariant]);
+  }, [apiKey, handleLoadApiModels]);
 
   const handleDownloadBonsai = useCallback(async (size: BonsaiModelSize) => {
     if (downloadingBonsai) return;
     setDownloadingBonsai(size);
     setBonsaiDownloadProgress(0);
     setBonsaiDownloadError(null);
+    setBonsaiDownloadErrorSize(null);
     try {
       const result = await window.ghostedit.downloadBonsaiModel(size);
-      if (result.success) {
-        const status = await window.ghostedit.getBonsaiStatus();
-        setBonsaiModels(status.models);
-        setBonsaiDownloadError(null);
-      } else {
-        setBonsaiDownloadError(result.error || 'Download failed');
+      if (!result.success) {
+        setBonsaiDownloadError(result.error || 'Model download failed');
+        setBonsaiDownloadErrorSize(size);
+        return;
       }
-    } catch (err: any) {
-      setBonsaiDownloadError(err?.message || 'Download failed');
+      const status = await window.ghostedit.getBonsaiStatus();
+      setBonsaiModels(status.models);
+    } catch (err) {
+      setBonsaiDownloadError(err instanceof Error ? err.message : 'Model download failed');
+      setBonsaiDownloadErrorSize(size);
     } finally {
       setDownloadingBonsai(null);
       setBonsaiDownloadProgress(0);
@@ -259,7 +283,7 @@ export default function Settings() {
         <main className="flex flex-1 flex-col items-center justify-center px-8" aria-live="polite">
           <div className="w-full max-w-sm">
             <div className="mb-6 flex items-center gap-3">
-              <div className={`h-3 w-3 rounded-full ${isError ? 'bg-red-400' : 'animate-pulse bg-emerald-400'}`} />
+              <div className={`h-3 w-3 rounded-full ${isError ? 'bg-ghost-error' : 'animate-pulse bg-ghost-success'}`} />
               <span className="text-xs font-medium uppercase tracking-wide text-ghost-muted">
                 {isError ? 'Setup paused' : 'Preparing GhostEdit'}
               </span>
@@ -279,9 +303,9 @@ export default function Settings() {
               aria-valuenow={progress ?? undefined}
             >
               {progress === null ? (
-                <div className="h-full w-1/3 animate-pulse rounded-full bg-emerald-400" />
+                <div className="h-full w-1/3 animate-pulse rounded-full bg-ghost-success" />
               ) : (
-                <div className="h-full rounded-full bg-emerald-400 transition-[width] duration-300" style={{ width: `${progress}%` }} />
+                <div className="h-full rounded-full bg-ghost-success transition-[width] duration-300" style={{ width: `${progress}%` }} />
               )}
             </div>
             <div className="mt-2 flex justify-between text-xs text-ghost-muted">
@@ -290,11 +314,11 @@ export default function Settings() {
             </div>
             {isError && (
               <>
-                <p className="mt-4 break-words text-xs text-red-300">{startupSetup.error}</p>
+                <p className="mt-4 break-words text-xs text-ghost-error">{startupSetup.error}</p>
                 <button
-                  onClick={handleStartLocalModelSetup}
+                  onClick={handleRetryStartupSetup}
                   disabled={retryingStartupSetup}
-                  className="mt-5 rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-emerald-400 disabled:opacity-50"
+                  className="mt-5 rounded-md bg-ghost-success px-4 py-2 text-sm font-medium text-[#282a36] transition-colors hover:brightness-110 disabled:opacity-50"
                 >
                   {retryingStartupSetup ? 'Retrying…' : 'Retry download'}
                 </button>
@@ -312,6 +336,7 @@ export default function Settings() {
       <Welcome
         config={config}
         onComplete={handleWelcomeComplete}
+        onConfigUpdate={handleWelcomeConfigUpdate}
       />
     );
   }
@@ -324,6 +349,9 @@ export default function Settings() {
 
   const cliProviderDef = CLI_PROVIDERS[config.cliProvider];
   const cliModels = cliProviderDef?.availableModels ?? [];
+  const activeProvider = config.provider === 'local' || config.provider === 'openai-compatible'
+    ? config.provider
+    : config.cliProvider;
   const currentSection = SECTIONS.find((s) => s.id === activeSection)!;
 
   return (
@@ -345,7 +373,7 @@ export default function Settings() {
             </button>
             <button
               onClick={() => window.ghostedit.windowControls.close()}
-              className="w-8 h-8 flex items-center justify-center rounded hover:bg-red-500/80 hover:text-white text-ghost-muted"
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-ghost-error/80 hover:text-white text-ghost-muted"
               aria-label="Close"
             >
               <CloseIcon />
@@ -378,7 +406,6 @@ export default function Settings() {
             onClick={() => {
               const next = isSimpleMode ? 'advanced' : 'simple';
               update({ settingsMode: next } as any);
-              // If switching to simple and current section is hidden, go to general
               if (next === 'simple' && !SIMPLE_SECTIONS.includes(activeSection)) {
                 setActiveSection('general');
               }
@@ -398,6 +425,35 @@ export default function Settings() {
             {/* ── General ── */}
             {activeSection === 'general' && (
               <>
+                <div className="settings-row gap-4">
+                  <div>
+                    <p className="whitespace-nowrap text-[13px] font-medium">Default correction model</p>
+                    <p className="text-[11px] text-ghost-muted">Used when you run the default correction action</p>
+                  </div>
+                  <select
+                    aria-label="Default correction model"
+                    value={activeProvider}
+                    onChange={(e) => {
+                      const provider = e.target.value as AppConfig['provider'];
+                      const model = provider === 'local'
+                        ? `bonsai-${config.bonsaiModelSize ?? '1.7b'}`
+                        : provider === 'openai-compatible'
+                          ? config.apiModel
+                          : config.cliModel;
+                      update({ provider, model, ...(provider === 'local' ? { localModelEngine: 'bonsai' } : {}) });
+                    }}
+                    className="input !w-52 shrink-0"
+                  >
+                    <option value="local">
+                      Local Model · Bonsai {config.bonsaiModelSize ?? '1.7b'}
+                    </option>
+                    <option value="openai-compatible">API · {config.apiModel || 'No model selected'}</option>
+                    <option value={config.cliProvider}>
+                      CLI · {cliProviderDef?.displayName ?? config.cliProvider} ({config.cliModel})
+                    </option>
+                  </select>
+                </div>
+
                 <div className="settings-row">
                   <div>
                     <p className="text-[13px] font-medium">Language</p>
@@ -449,45 +505,18 @@ export default function Settings() {
               </>
             )}
 
-            {/* ── Models ── */}
+            {/* ── Local Model ── */}
             {activeSection === 'models' && (
               <>
-                {/* Engine selector */}
                 <div className="settings-row">
                   <div>
                     <p className="text-[13px] font-medium">Correction Engine</p>
-                    <p className="text-[11px] text-ghost-muted">Choose the local model for offline corrections</p>
+                    <p className="text-[11px] text-ghost-muted">Local model for offline corrections</p>
                   </div>
-                  <select
-                    value={config.localModelEngine ?? 'bonsai'}
-                    onChange={(e) => update({ localModelEngine: e.target.value as LocalModelEngine })}
-                    className="input w-44"
-                  >
-                    <option value="bonsai">Bonsai (Recommended)</option>
-                    <option value="t5">T5 (Legacy)</option>
-                  </select>
+                  <span className="text-[13px] font-medium">Bonsai</span>
                 </div>
 
                 <div className="settings-row">
-                  <div>
-                    <p className="text-[13px] font-medium">Local Model Setup</p>
-                    <p className="text-[11px] text-ghost-muted">Download or update the local server and Bonsai model</p>
-                  </div>
-                  <button
-                    onClick={handleStartLocalModelSetup}
-                    disabled={retryingStartupSetup || startupSetup?.active}
-                    className="rounded-md bg-blue-500/20 px-3 py-1.5 text-[12px] font-medium text-blue-400 transition-colors hover:bg-blue-500/30 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {retryingStartupSetup ? 'Starting…' : 'Download Local Model'}
-                  </button>
-                </div>
-
-                <div className="border-b border-ghost-row-border my-2" />
-
-                {/* Bonsai model list */}
-                {config.localModelEngine !== 't5' && (
-                  <>
-                    <div className="settings-row">
                       <div>
                         <p className="text-[13px] font-medium">Active Model</p>
                         <p className="text-[11px] text-ghost-muted">Bonsai model size for corrections</p>
@@ -516,29 +545,30 @@ export default function Settings() {
                           </div>
                           <div>
                             {m.bundled ? (
-                              <span className="bg-green-500/15 text-green-400 text-[11px] font-medium rounded-full px-2.5 py-0.5">Bundled</span>
+                              <span className="bg-ghost-success/15 text-ghost-success text-[11px] font-medium rounded-full px-2.5 py-0.5">Bundled</span>
                             ) : m.available ? (
-                              <span className="bg-green-500/15 text-green-400 text-[11px] font-medium rounded-full px-2.5 py-0.5">Downloaded</span>
+                              <span className="bg-ghost-success/15 text-ghost-success text-[11px] font-medium rounded-full px-2.5 py-0.5">Downloaded</span>
                             ) : downloadingBonsai === m.size ? (
-                              <span className="text-blue-400 text-[11px] font-medium">{bonsaiDownloadProgress}%</span>
-                            ) : bonsaiDownloadError && downloadingBonsai === null ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-ghost-error text-[11px]">Failed</span>
+                              <span className="text-ghost-cyan text-[11px] font-medium">Downloading {bonsaiDownloadProgress}%</span>
+                            ) : bonsaiDownloadError && bonsaiDownloadErrorSize === m.size ? (
+                              <button
+                                onClick={() => void handleDownloadBonsai(m.size)}
+                                disabled={!!downloadingBonsai}
+                                className="text-[11px] font-medium text-ghost-error hover:text-ghost-orange disabled:opacity-50"
+                              >
+                                Retry download
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-3">
+                                <span className="text-ghost-muted text-[11px]">Unavailable</span>
                                 <button
-                                  onClick={() => { setBonsaiDownloadError(null); handleDownloadBonsai(m.size); }}
-                                  className="px-3 py-1 rounded-lg bg-ghost-error/20 text-ghost-error text-[12px] font-medium hover:bg-ghost-error/30 transition-colors"
+                                  onClick={() => void handleDownloadBonsai(m.size)}
+                                  disabled={!!downloadingBonsai}
+                                  className="text-[11px] font-medium text-ghost-cyan hover:text-ghost-purple underline underline-offset-2 disabled:opacity-50"
                                 >
-                                  Retry
+                                  Download
                                 </button>
                               </div>
-                            ) : (
-                              <button
-                                onClick={() => handleDownloadBonsai(m.size)}
-                                disabled={!!downloadingBonsai}
-                                className="px-3 py-1 rounded-lg bg-blue-500/20 text-blue-400 text-[12px] font-medium hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                Download
-                              </button>
                             )}
                           </div>
                         </div>
@@ -546,103 +576,17 @@ export default function Settings() {
                     </div>
 
                     {downloadingBonsai && (
-                      <div className="w-full bg-white/10 rounded-full h-1.5 mt-3">
-                        <div
-                          className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${bonsaiDownloadProgress}%` }}
-                        />
+                      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={bonsaiDownloadProgress} aria-label={`Downloading Bonsai ${downloadingBonsai}`}>
+                        <div className="h-full rounded-full bg-ghost-purple transition-[width] duration-200" style={{ width: `${bonsaiDownloadProgress}%` }} />
                       </div>
                     )}
-
-                    {bonsaiDownloadError && !downloadingBonsai && (
-                      <p className="text-[11px] text-ghost-error mt-2">{bonsaiDownloadError}</p>
+                    {bonsaiDownloadError && downloadingBonsai === null && (
+                      <p className="mt-2 text-[11px] text-ghost-error">{bonsaiDownloadError}</p>
                     )}
 
                     <p className="text-[11px] text-ghost-muted mt-4">
-                      1-bit quantized models. Works offline. First use starts a local server (~5s).
-                    </p>
-                  </>
-                )}
-
-                {/* T5 model list (legacy) */}
-                {config.localModelEngine === 't5' && (
-                  <>
-                    <div className="settings-row">
-                      <div>
-                        <p className="text-[13px] font-medium">Active Variant</p>
-                        <p className="text-[11px] text-ghost-muted">T5 model variant for local corrections</p>
-                      </div>
-                      <select
-                        value={config.localModelVariant ?? DEFAULT_BUNDLED_VARIANT}
-                        onChange={(e) => update({ localModelVariant: e.target.value as LocalModelVariant })}
-                        className="input w-44"
-                      >
-                        {modelInfo.variants
-                          .filter((v) => v.available)
-                          .map((v) => (
-                            <option key={v.variant} value={v.variant}>{v.displayName}</option>
-                          ))}
-                      </select>
-                    </div>
-
-                    <div className="border-b border-ghost-row-border my-2" />
-
-                    <div className="space-y-0">
-                      {modelInfo.variants.map((v) => (
-                        <div key={v.variant} className="settings-row">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[13px] font-medium">{v.displayName}</span>
-                            <span className="text-[11px] text-ghost-muted">~{v.sizeMB} MB</span>
-                          </div>
-                          <div>
-                            {v.bundled ? (
-                              <span className="bg-green-500/15 text-green-400 text-[11px] font-medium rounded-full px-2.5 py-0.5">Bundled</span>
-                            ) : v.available ? (
-                              <span className="bg-green-500/15 text-green-400 text-[11px] font-medium rounded-full px-2.5 py-0.5">Downloaded</span>
-                            ) : downloadingVariant === v.variant ? (
-                              <span className="text-blue-400 text-[11px] font-medium">{downloadProgress}%</span>
-                            ) : downloadError && downloadingVariant === null ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-ghost-error text-[11px]">Failed</span>
-                                <button
-                                  onClick={() => { setDownloadError(null); handleDownloadVariant(v.variant); }}
-                                  className="px-3 py-1 rounded-lg bg-ghost-error/20 text-ghost-error text-[12px] font-medium hover:bg-ghost-error/30 transition-colors"
-                                >
-                                  Retry
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => handleDownloadVariant(v.variant)}
-                                disabled={!!downloadingVariant}
-                                className="px-3 py-1 rounded-lg bg-blue-500/20 text-blue-400 text-[12px] font-medium hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                Download
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {downloadingVariant && (
-                      <div className="w-full bg-white/10 rounded-full h-1.5 mt-3">
-                        <div
-                          className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${downloadProgress}%` }}
-                        />
-                      </div>
-                    )}
-
-                    {downloadError && !downloadingVariant && (
-                      <p className="text-[11px] text-ghost-error mt-2">{downloadError}</p>
-                    )}
-
-                    <p className="text-[11px] text-ghost-muted mt-4">
-                      T5 models must be downloaded. Works offline after download.
-                    </p>
-                  </>
-                )}
+                      Downloads save directly into .ghostedit/models/bonsai in your home folder. Models work offline; first use starts a local server (~5s).
+                      </p>
               </>
             )}
 
@@ -658,7 +602,13 @@ export default function Settings() {
                     value={config.cliProvider}
                     onChange={(e) => {
                       const p = e.target.value as CLIProviderName;
-                      update({ cliProvider: p, cliModel: CLI_PROVIDERS[p].defaultModel });
+                      update({
+                        cliProvider: p,
+                        cliModel: CLI_PROVIDERS[p].defaultModel,
+                        ...(config.provider !== 'local' && config.provider !== 'openai-compatible'
+                          ? { provider: p, model: CLI_PROVIDERS[p].defaultModel }
+                          : {}),
+                      });
                     }}
                     className="input w-44"
                   >
@@ -678,7 +628,10 @@ export default function Settings() {
                   </div>
                   <select
                     value={config.cliModel}
-                    onChange={(e) => update({ cliModel: e.target.value })}
+                    onChange={(e) => update({
+                      cliModel: e.target.value,
+                      ...(config.provider === config.cliProvider ? { model: e.target.value } : {}),
+                    })}
                     className="input w-44"
                   >
                     {cliModels.map((m) => (
@@ -707,6 +660,87 @@ export default function Settings() {
                     </p>
                   </div>
                 </div>
+                <div className="border-b border-ghost-row-border my-3" />
+                <div className="settings-row">
+                  <div>
+                    <p className="text-[13px] font-medium">OpenAI-compatible API</p>
+                    <p className="text-[11px] text-ghost-muted">OpenAI-compatible chat completions</p>
+                  </div>
+                  <select
+                    value={config.apiPreset}
+                    onChange={(e) => {
+                      const preset = e.target.value as OpenAICompatiblePreset;
+                      const defaults = API_PRESETS[preset];
+                      update({
+                        apiPreset: preset,
+                        apiBaseUrl: defaults.baseUrl,
+                        apiModel: defaults.model,
+                        ...(config.provider === 'openai-compatible' ? { model: defaults.model } : {}),
+                      });
+                    }}
+                    className="input w-44"
+                  >
+                    {Object.entries(API_PRESETS).map(([value, preset]) => (
+                      <option key={value} value={value}>{preset.displayName}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="settings-row">
+                  <div className="flex-1 mr-4">
+                    <p className="text-[13px] font-medium">Base URL</p>
+                    <p className="text-[11px] text-ghost-muted mb-2">The API v1 endpoint for your provider</p>
+                    <input type="url" value={config.apiBaseUrl} placeholder="https://api.example.com/v1" onChange={(e) => update({ apiBaseUrl: e.target.value })} className="input" />
+                  </div>
+                </div>
+
+                <div className="settings-row">
+                  <div className="flex-1 mr-4">
+                    <p className="text-[13px] font-medium">Model</p>
+                    <p className="text-[11px] text-ghost-muted mb-2">Models available from this API host</p>
+                    <div className="flex gap-2">
+                      <select
+                        value={config.apiModel}
+                        onChange={(e) => update({
+                          apiModel: e.target.value,
+                          ...(config.provider === 'openai-compatible' ? { model: e.target.value } : {}),
+                        })}
+                        className="input min-w-0 flex-1"
+                        disabled={loadingApiModels || apiModels.length === 0}
+                      >
+                        {config.apiModel && !apiModels.includes(config.apiModel) && (
+                          <option value={config.apiModel}>{config.apiModel} (configured)</option>
+                        )}
+                        {apiModels.length === 0 && !config.apiModel && <option value="">No model selected</option>}
+                        {apiModels.map((model) => <option key={model} value={model}>{model}</option>)}
+                      </select>
+                      <button
+                        onClick={handleLoadApiModels}
+                        disabled={loadingApiModels}
+                        className="rounded-md bg-white/10 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-white/15 disabled:cursor-wait disabled:opacity-50"
+                      >
+                        {loadingApiModels ? 'Loading…' : 'Refresh'}
+                      </button>
+                    </div>
+                    {apiModelsError && <p className="mt-1.5 text-[11px] text-ghost-error">{apiModelsError}</p>}
+                  </div>
+                </div>
+
+                <div className="settings-row">
+                  <div className="flex-1 mr-4">
+                    <p className="text-[13px] font-medium">API key</p>
+                    <p className="text-[11px] text-ghost-muted mb-2">Stored encrypted with system credential storage</p>
+                    <div className="flex gap-2">
+                      <input type="password" value={apiKey} placeholder="Required by hosted providers" autoComplete="new-password" onChange={(e) => { setApiKey(e.target.value); setApiKeySaved(false); }} className="input flex-1" />
+                      <button onClick={handleSaveApiKey} className="rounded-md bg-white/10 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-white/15">
+                        {apiKeySaved ? 'Saved' : 'Save key'}
+                      </button>
+                    </div>
+                    {apiKeyError && <p className="mt-1.5 text-[11px] text-ghost-error">{apiKeyError}</p>}
+                  </div>
+                </div>
+
+                <p className="mt-3 text-[11px] text-ghost-muted">Use the API action in the system tray or its configured hotkey to correct selected text.</p>
               </>
             )}
 
@@ -735,6 +769,16 @@ export default function Settings() {
                 </div>
                 <div className="settings-row">
                   <div className="flex-1 mr-4">
+                    <p className="text-[13px] font-medium">API Hotkey</p>
+                    <p className="text-[11px] text-ghost-muted mb-2">Triggers correction using the configured OpenAI-compatible API</p>
+                    <HotkeyInput
+                      value={config.apiHotkeyAccelerator}
+                      onChange={(v) => update({ apiHotkeyAccelerator: v })}
+                    />
+                  </div>
+                </div>
+                <div className="settings-row">
+                  <div className="flex-1 mr-4">
                     <p className="text-[13px] font-medium">Undo Last Correction</p>
                     <p className="text-[11px] text-ghost-muted mb-2">Re-pastes the original text from the most recent correction</p>
                     <HotkeyInput
@@ -755,14 +799,6 @@ export default function Settings() {
                   checked={config.launchAtLogin}
                   onChange={(v) => update({ launchAtLogin: v })}
                 />
-                {config.localModelEngine === 't5' && (
-                  <ToggleRow
-                    label="Fast correction mode"
-                    description="Use greedy decoding for faster T5 corrections (slight quality trade-off)"
-                    checked={config.localModelSpeed === 'fast'}
-                    onChange={(v) => update({ localModelSpeed: v ? 'fast' : 'quality' })}
-                  />
-                )}
                 <ToggleRow
                   label="Clipboard-only mode"
                   description="Copy corrected text to clipboard instead of pasting it back"
@@ -958,7 +994,7 @@ export default function Settings() {
                               setNewWhitelistApp('');
                             }}
                             disabled={!newWhitelistApp.trim()}
-                            className="px-3 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-[12px] font-medium hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-3 py-2 rounded-lg bg-ghost-purple/20 text-ghost-purple text-[12px] font-medium hover:bg-ghost-purple/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             Add
                           </button>
@@ -1081,7 +1117,7 @@ export default function Settings() {
                               setNewMeetingApp('');
                             }}
                             disabled={!newMeetingApp.trim()}
-                            className="px-3 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-[12px] font-medium hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-3 py-2 rounded-lg bg-ghost-purple/20 text-ghost-purple text-[12px] font-medium hover:bg-ghost-purple/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             Add
                           </button>
@@ -1109,7 +1145,7 @@ export default function Settings() {
                     )}
 
                     {isMac && (
-                      <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-[11px] text-yellow-300/80 mt-3">
+                      <div className="rounded-lg bg-ghost-warning/10 border border-ghost-warning/20 px-3 py-2 text-[11px] text-ghost-warning/80 mt-3">
                         macOS requires Accessibility permission for keystroke monitoring.
                         You will be prompted to grant access when monitoring is first enabled.
                       </div>
@@ -1128,15 +1164,16 @@ export default function Settings() {
             {activeSection === 'prompt' && (
               <>
                 <textarea
+                  aria-label="System prompt"
                   value={systemPrompt}
                   onChange={(e) => setSystemPrompt(e.target.value)}
-                  className="input w-full h-48 resize-y font-mono text-[12px]"
+                  className="input w-full h-[55vh] min-h-[300px] resize-y font-mono text-[12px] leading-relaxed"
                   placeholder="Enter a custom system prompt..."
                 />
                 <div className="flex items-center gap-3 mt-3">
                   <button
                     onClick={handleSavePrompt}
-                    className="px-4 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-[13px] font-medium hover:bg-blue-500/30 transition-colors"
+                    className="px-4 py-1.5 rounded-lg bg-ghost-purple/20 text-ghost-purple text-[13px] font-medium hover:bg-ghost-purple/30 transition-colors"
                   >
                     {promptSaved ? 'Saved!' : 'Save Prompt'}
                   </button>
@@ -1147,11 +1184,9 @@ export default function Settings() {
                     Reset to Default
                   </button>
                 </div>
-                {config.localModelEngine === 'bonsai' && (
-                  <p className="text-[11px] text-blue-400/70 mt-4">
-                    Bonsai uses its own optimized &quot;Teacher&quot; prompt by default. Customize above to override it.
-                  </p>
-                )}
+                <p className="text-[11px] text-ghost-purple/80 mt-4">
+                  Bonsai uses its own optimized &quot;Teacher&quot; prompt by default. Customize above to override it.
+                </p>
                 <p className="text-[11px] text-ghost-muted mt-2">
                   The system prompt is sent to the AI before your text. It controls correction behavior, style, and output format.
                   Changes also apply to CLI providers. Stored in ~/.ghostedit/prompt.txt.
@@ -1174,7 +1209,7 @@ export default function Settings() {
                   <button
                     onClick={handleAddWord}
                     disabled={!newWord.trim()}
-                    className="px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-[13px] font-medium hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-4 py-2 rounded-lg bg-ghost-purple/20 text-ghost-purple text-[13px] font-medium hover:bg-ghost-purple/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Add
                   </button>
@@ -1198,7 +1233,7 @@ export default function Settings() {
                       <button
                         onClick={handleBulkImport}
                         disabled={!bulkText.trim()}
-                        className="px-4 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-[13px] font-medium hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-4 py-1.5 rounded-lg bg-ghost-purple/20 text-ghost-purple text-[13px] font-medium hover:bg-ghost-purple/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         Import All
                       </button>
@@ -1350,7 +1385,7 @@ const Toggle = React.memo(function Toggle({ checked, onChange }: { checked: bool
         }
       }}
       className={`relative shrink-0 w-[38px] h-[22px] rounded-full transition-colors duration-200 ${
-        checked ? 'bg-blue-500' : 'bg-white/[0.15]'
+        checked ? 'bg-ghost-purple' : 'bg-white/[0.15]'
       }`}
     >
       <span

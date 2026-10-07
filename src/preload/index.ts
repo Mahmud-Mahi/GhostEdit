@@ -27,6 +27,11 @@ const api = {
   // ── CLI Status ──
   getCLIStatus: (): Promise<Record<string, { found: boolean; path: string | null }>> =>
     ipcRenderer.invoke(IPC.GET_CLI_STATUS),
+  getApiKey: (): Promise<string> => ipcRenderer.invoke(IPC.GET_API_KEY),
+  saveApiKey: (apiKey: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.SAVE_API_KEY, apiKey),
+  getApiModels: (): Promise<{ success: boolean; models: string[]; error?: string }> =>
+    ipcRenderer.invoke(IPC.GET_API_MODELS),
 
   // ── Correction ──
   correctText: (

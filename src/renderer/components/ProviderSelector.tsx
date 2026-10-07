@@ -20,7 +20,7 @@ export default function ProviderSelector({ value, onChange, cliStatus }: Provide
             onClick={() => onChange(p.name)}
             className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
               isActive
-                ? 'bg-blue-500 text-white'
+                ? 'bg-ghost-accent text-[#282a36]'
                 : 'bg-white/10 text-ghost-muted hover:bg-white/15 hover:text-white'
             }`}
           >

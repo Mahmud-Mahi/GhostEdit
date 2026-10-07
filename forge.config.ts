@@ -32,6 +32,9 @@ const ICON_EXTRA_RESOURCES = [
   './assets/MenuBarIconProcessing.png',
 ];
 
+const isWindowsHost = process.platform === 'win32';
+const isMacOSHost = process.platform === 'darwin';
+
 /**
  * Recursively collect all production-dependency package names starting from
  * the EXTERNAL_MODULES seeds.  Scope entries (e.g. '@nut-tree-fork') are
@@ -144,9 +147,11 @@ const config: ForgeConfig = {
     },
   },
   makers: [
-    new MakerSquirrel({ name: 'GhostEdit', authors: 'GhostEdit contributors' }),
-    new MakerZIP({}, ['darwin']),
-    new MakerDMG({ format: 'ULFO' }),
+    ...(isWindowsHost
+      ? [new MakerSquirrel({ name: 'GhostEdit', authors: 'GhostEdit contributors' })]
+      : []),
+    new MakerZIP({}, isWindowsHost ? ['darwin'] : ['darwin', 'win32']),
+    ...(isMacOSHost ? [new MakerDMG({ format: 'ULFO' })] : []),
     new MakerDeb({
       options: {
         name: 'ghostedit',

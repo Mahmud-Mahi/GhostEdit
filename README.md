@@ -449,8 +449,8 @@ Produces platform-specific installers:
 
 | Platform | Format | Output |
 |----------|--------|--------|
-| macOS | DMG + ZIP | `out/make/` |
-| Windows | Squirrel (`Setup.exe`) | `out/make/squirrel.windows/` |
+| macOS | ZIP on Linux; ZIP + DMG on macOS | `out/make/` |
+| Windows | Squirrel (`Setup.exe`) on Windows; ZIP on other hosts | `out/make/` |
 | Linux | Debian | `out/make/deb/x64/` |
 
 ### Build a Debian package
@@ -475,26 +475,28 @@ npm run make:deb:arm64
 
 ### Build Windows and macOS installers
 
-Build on the matching operating system so Forge can produce its native installer:
+Build on Windows for the native Squirrel installer. Linux and macOS builds
+produce a ZIP of the Windows application instead; it contains the app executable
+but not the Squirrel install/update workflow.
 
 ```bash
-# Windows x64: Squirrel Setup.exe installer
+# Windows x64: Squirrel installer on Windows, ZIP on Linux/macOS
 npm run make:win
 
-# Windows ARM64 Squirrel installer
+# Windows ARM64: Squirrel installer on Windows, ZIP on Linux/macOS
 npm run make:win:arm64
 
-# macOS Apple Silicon DMG
+# macOS Apple Silicon: ZIP on Linux, ZIP + DMG on macOS
 npm run make:mac:arm64
 
-# macOS Intel DMG
+# macOS Intel: ZIP on Linux, ZIP + DMG on macOS
 npm run make:mac:x64
 ```
 
-Windows produces the Squirrel installer set, including `Setup.exe`; macOS
-produces DMG and ZIP artifacts. Each build bundles only its own OS/architecture
-server. Run these commands on Windows or macOS, respectively, rather than on
-Linux.
+Windows produces the Squirrel installer set, including `Setup.exe`, when built
+on Windows. Cross-builds from Linux or macOS produce a ZIP instead. For macOS
+targets, Linux builds produce only a ZIP; macOS builds produce both ZIP and DMG.
+Each build bundles only its own OS/architecture server.
 
 ### What gets bundled
 

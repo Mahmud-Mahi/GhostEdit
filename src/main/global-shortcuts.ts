@@ -8,6 +8,7 @@ let registeredLocalAccelerator: string | null = null;
 let registeredCliAccelerator: string | null = null;
 let registeredUndoAccelerator: string | null = null;
 let registeredLineAccelerator: string | null = null;
+let registeredApiAccelerator: string | null = null;
 
 /**
  * Register all global hotkeys for text correction, undo, and line correction.
@@ -17,12 +18,14 @@ export function registerGlobalShortcuts(
   cliHandler: ShortcutHandler,
   undoHandler: ShortcutHandler,
   lineHandler?: ShortcutHandler,
+  apiHandler?: ShortcutHandler,
 ): void {
   const config = configManager.load();
   const localAcc = config.localHotkeyAccelerator || DEFAULT_CONFIG.localHotkeyAccelerator;
   const cliAcc = config.cliHotkeyAccelerator || DEFAULT_CONFIG.cliHotkeyAccelerator;
   const undoAcc = config.undoHotkeyAccelerator || DEFAULT_CONFIG.undoHotkeyAccelerator;
   const lineAcc = config.lineHotkeyAccelerator || DEFAULT_CONFIG.lineHotkeyAccelerator;
+  const apiAcc = config.apiHotkeyAccelerator || DEFAULT_CONFIG.apiHotkeyAccelerator;
 
   if (localAcc === cliAcc) {
     console.warn('[GhostEdit] Local and CLI hotkeys are the same — only local will be registered');
@@ -37,6 +40,9 @@ export function registerGlobalShortcuts(
   }
   if (lineHandler && lineAcc && lineAcc !== localAcc && lineAcc !== cliAcc && lineAcc !== undoAcc) {
     registerOne(lineAcc, lineHandler, 'line');
+  }
+  if (apiHandler && apiAcc && ![localAcc, cliAcc, undoAcc, lineAcc].includes(apiAcc)) {
+    registerOne(apiAcc, apiHandler, 'api');
   }
 }
 
@@ -53,6 +59,7 @@ function registerOne(accelerator: string, handler: ShortcutHandler, label: strin
       else if (label === 'cli') registeredCliAccelerator = accelerator;
       else if (label === 'undo') registeredUndoAccelerator = accelerator;
       else if (label === 'line') registeredLineAccelerator = accelerator;
+          else if (label === 'api') registeredApiAccelerator = accelerator;
     } else {
       console.error(`[GhostEdit] Failed to register ${label} global shortcut: ${accelerator}`);
     }
@@ -69,9 +76,10 @@ export function refreshGlobalShortcuts(
   cliHandler: ShortcutHandler,
   undoHandler: ShortcutHandler,
   lineHandler?: ShortcutHandler,
+  apiHandler?: ShortcutHandler,
 ): void {
   unregisterAll();
-  registerGlobalShortcuts(localHandler, cliHandler, undoHandler, lineHandler);
+  registerGlobalShortcuts(localHandler, cliHandler, undoHandler, lineHandler, apiHandler);
 }
 
 /**
@@ -83,4 +91,5 @@ export function unregisterAll(): void {
   registeredCliAccelerator = null;
   registeredUndoAccelerator = null;
   registeredLineAccelerator = null;
+  registeredApiAccelerator = null;
 }

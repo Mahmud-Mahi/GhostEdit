@@ -2,6 +2,8 @@ import { ipcMain, dialog, type BrowserWindow } from 'electron';
 import * as fs from 'node:fs';
 import { IPC, type AppConfig, type CorrectionHistoryEntry, type LocalModelVariant, type BonsaiModelSize, type WindowType } from '../shared/types';
 import { configManager } from './config-manager';
+import { loadApiKey, saveApiKey } from './api-key-store';
+import { listApiModels } from './openai-compatible-runner';
 import { correctText, correctTextStreaming } from './correction-dispatcher';
 import { getLocalModelStatus, invalidatePipeline, downloadVariant } from './local-model-runner';
 import { scanBonsaiModels, downloadBonsaiModel } from './bonsai-model-manager';
@@ -51,6 +53,24 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
       statuses[name] = { found: !!resolved, path: resolved };
     }
     return statuses;
+  });
+
+  ipcMain.handle(IPC.GET_API_KEY, () => loadApiKey());
+  ipcMain.handle(IPC.SAVE_API_KEY, (_event, apiKey: string) => {
+    try {
+      saveApiKey(apiKey);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  });
+  ipcMain.handle(IPC.GET_API_MODELS, async () => {
+    try {
+      const config = configManager.load();
+      return { success: true, models: await listApiModels(config.apiBaseUrl, loadApiKey(), config.apiPreset) };
+    } catch (err) {
+      return { success: false, models: [], error: err instanceof Error ? err.message : String(err) };
+    }
   });
 
   // ── Correction (non-streaming) ──
@@ -287,10 +307,17 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
       const localModel = config.localModelEngine === 'bonsai'
         ? `bonsai-${config.bonsaiModelSize}`
         : 't5-grammar';
+      const model = config.provider === 'local'
+        ? localModel
+        : config.provider === 'openai-compatible'
+          ? config.apiModel
+          : config.provider === config.cliProvider
+            ? config.cliModel
+            : config.model;
       const result = await correctText(
         'You are a grammar correction assistant. Fix grammar, spelling, and punctuation in the provided text. Return ONLY the corrected text, nothing else.',
         text,
-        { ...config, provider: 'local', model: localModel },
+        { ...config, model },
       );
       return { success: true, text: result.text };
     } catch (err: any) {

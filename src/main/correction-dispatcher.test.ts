@@ -18,7 +18,15 @@ vi.mock('./bonsai-inference', () => ({
   correctTextBonsaiStreaming: vi.fn(),
 }));
 
+vi.mock('./openai-compatible-runner', () => ({
+  correctTextOpenAICompatible: vi.fn(),
+  correctTextOpenAICompatibleStreaming: vi.fn(),
+}));
+
+vi.mock('./api-key-store', () => ({ loadApiKey: () => 'test-key' }));
+
 import { correctText as correctTextCLI, correctTextStreaming as correctTextStreamingCLI } from './cli-runner';
+import { correctTextOpenAICompatible, correctTextOpenAICompatibleStreaming } from './openai-compatible-runner';
 import { correctTextLocal, correctTextLocalStreaming } from './local-model-runner';
 import { correctTextBonsai, correctTextBonsaiStreaming } from './bonsai-inference';
 import { correctText, correctTextStreaming } from './correction-dispatcher';
@@ -33,6 +41,7 @@ const t5Config = { provider: 'local', localModelEngine: 't5' } as AppConfig;
 const claudeConfig = { provider: 'claude' } as AppConfig;
 const geminiConfig = { provider: 'gemini' } as AppConfig;
 const codexConfig = { provider: 'codex' } as AppConfig;
+const apiConfig = { provider: 'openai-compatible' } as AppConfig;
 
 describe('correctText', () => {
   it('routes to correctTextBonsai when provider is local and engine is bonsai', async () => {
@@ -66,6 +75,16 @@ describe('correctText', () => {
     expect(correctTextLocal).not.toHaveBeenCalled();
     expect(correctTextBonsai).not.toHaveBeenCalled();
     expect(result).toEqual({ text: 'claude result', durationMs: 20 });
+  });
+
+  it('routes to the OpenAI-compatible API when selected', async () => {
+    vi.mocked(correctTextOpenAICompatible).mockResolvedValue({ text: 'api result', durationMs: 25 });
+
+    const result = await correctText('prompt', 'input text', apiConfig);
+
+    expect(correctTextOpenAICompatible).toHaveBeenCalledWith('prompt', 'input text', apiConfig, 'test-key');
+    expect(correctTextCLI).not.toHaveBeenCalled();
+    expect(result.text).toBe('api result');
   });
 
   it('passes systemPrompt and text through unchanged', async () => {
@@ -111,6 +130,17 @@ describe('correctTextStreaming', () => {
     expect(correctTextLocalStreaming).not.toHaveBeenCalled();
     expect(correctTextBonsaiStreaming).not.toHaveBeenCalled();
     expect(result).toEqual({ text: 'gemini out', durationMs: 30 });
+  });
+
+  it('routes streaming API corrections through the OpenAI-compatible runner', async () => {
+    vi.mocked(correctTextOpenAICompatibleStreaming).mockResolvedValue({ text: 'api streamed', durationMs: 12 });
+    const onChunk = vi.fn();
+
+    const result = await correctTextStreaming('prompt', 'text', onChunk, apiConfig);
+
+    expect(correctTextOpenAICompatibleStreaming).toHaveBeenCalledWith('prompt', 'text', onChunk, apiConfig, 'test-key');
+    expect(correctTextStreamingCLI).not.toHaveBeenCalled();
+    expect(result.text).toBe('api streamed');
   });
 
   it('returns the result from whichever runner is called', async () => {

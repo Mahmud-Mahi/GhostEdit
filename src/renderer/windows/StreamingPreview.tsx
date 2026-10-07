@@ -158,17 +158,17 @@ export default function StreamingPreview() {
             {deletions !== 1 ? 's' : ''}
             {isPassive ? (
               passiveCountdown !== null && passiveCountdown > 0 && (
-                <span className="ml-2 text-green-400">— Applied — closing in {passiveCountdown}s</span>
+                <span className="ml-2 text-ghost-success">— Applied — closing in {passiveCountdown}s</span>
               )
             ) : (
               countdown !== null && countdown > 0 && (
-                <span className="ml-2 text-blue-400">— Auto-applying in {countdown}s</span>
+                <span className="ml-2 text-ghost-cyan">— Auto-applying in {countdown}s</span>
               )
             )}
           </span>
         ) : (
           <div className="flex items-center gap-2">
-            <span className="inline-block w-3 h-3 border-2 border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
+            <span className="inline-block w-3 h-3 border-2 border-ghost-cyan/40 border-t-ghost-cyan rounded-full animate-spin" />
             <span>Loading...</span>
           </div>
         )}
@@ -207,7 +207,7 @@ export default function StreamingPreview() {
           </button>
           <button
             onClick={handleAccept}
-            className="px-4 py-1.5 rounded-lg bg-blue-500 text-white text-[13px] font-medium hover:bg-blue-400 transition-colors"
+            className="px-4 py-1.5 rounded-lg bg-ghost-accent text-[#282a36] text-[13px] font-medium hover:brightness-110 transition-colors"
           >
             {countdown !== null && countdown > 0 ? `Accept (${countdown}s)` : 'Accept'}
           </button>

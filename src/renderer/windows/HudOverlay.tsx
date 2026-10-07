@@ -34,10 +34,10 @@ export default function HudOverlay() {
       <div
         className={`px-6 py-3 rounded-xl shadow-2xl backdrop-blur-xl border border-white/10 ${
           isError
-            ? 'bg-red-900/80 text-red-200'
+            ? 'bg-ghost-error/90 text-[#282a36]'
             : isDone
-              ? 'bg-green-900/80 text-green-200'
-              : 'bg-black/80 text-white'
+              ? 'bg-ghost-success/90 text-[#282a36]'
+              : 'bg-[#282a36]/95 text-[#f8f8f2]'
         }`}
       >
         <div className="flex items-center gap-2">

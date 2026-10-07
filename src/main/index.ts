@@ -357,7 +357,7 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
 
   const config = configManager.load();
   const effectiveConfig = providerOverride
-    ? { ...config, provider: providerOverride, model: modelOverride ?? (providerOverride === 'local' ? (config.localModelEngine === 'bonsai' ? `bonsai-${config.bonsaiModelSize}` : 't5-grammar') : config.model) }
+    ? { ...config, provider: providerOverride, model: modelOverride ?? (providerOverride === 'local' ? (config.localModelEngine === 'bonsai' ? `bonsai-${config.bonsaiModelSize}` : 't5-grammar') : providerOverride === 'openai-compatible' ? config.apiModel : config.model) }
     : config;
   const startTime = Date.now();
   let snap: ReturnType<typeof clipboardManager.snapshot> | null = null;
@@ -892,13 +892,13 @@ app.whenReady().then(() => {
       const c = configManager.load();
       performCorrection(c.cliProvider, c.cliModel);
     },
+    onCorrectAPI: () => {
+      const c = configManager.load();
+      performCorrection('openai-compatible', c.apiModel);
+    },
     onUndoLastCorrection: () => undoLastCorrection(),
     onOpenSettings: () => openWindow('settings'),
     onOpenHistory: () => openWindow('history'),
-    onDownloadLocalModel: () => {
-      openWindow('settings');
-      void runStartupSetup();
-    },
     onShowSuggestions: () => showSuggestionsFromTray(),
     onDownloadUpdate: () => downloadAndInstall(),
     getRecentCorrections: () => recentCorrections,
@@ -923,6 +923,10 @@ app.whenReady().then(() => {
     },
     () => undoLastCorrection(),
     () => correctCurrentLine(),
+    () => {
+      const c = configManager.load();
+      performCorrection('openai-compatible', c.apiModel);
+    },
   );
 
   // Start real-time monitoring if enabled
@@ -961,6 +965,10 @@ app.whenReady().then(() => {
       },
       () => undoLastCorrection(),
       () => correctCurrentLine(),
+      () => {
+        const c = configManager.load();
+        performCorrection('openai-compatible', c.apiModel);
+      },
     );
 
     // Restart monitoring if config changed (enabled/disabled/position change)
