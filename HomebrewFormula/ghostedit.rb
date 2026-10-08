@@ -1,5 +1,5 @@
 cask "ghostedit" do
-  version "1.3.0"
+  version "1.9.0"
   sha256 "8ce7d303282607ce66f6a83a85663801386f5d8bb10312099a2c7155c2f43da5"
 
   url "https://github.com/nareshnavinash/ghostedit-electron/releases/download/v#{version}/GhostEdit-darwin-arm64.zip"

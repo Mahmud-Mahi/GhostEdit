@@ -11,8 +11,9 @@ import type {
   BonsaiModelSize,
   BonsaiModelInfo,
   BonsaiServerStatus,
-  StartupSetupStatus,
   WindowType,
+  OpenAICompatiblePreset,
+  StartupSetupStatus,
 } from '../shared/types';
 
 /**
@@ -27,11 +28,12 @@ const api = {
   // ── CLI Status ──
   getCLIStatus: (): Promise<Record<string, { found: boolean; path: string | null }>> =>
     ipcRenderer.invoke(IPC.GET_CLI_STATUS),
-  getApiKey: (): Promise<string> => ipcRenderer.invoke(IPC.GET_API_KEY),
-  saveApiKey: (apiKey: string): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC.SAVE_API_KEY, apiKey),
-  getApiModels: (): Promise<{ success: boolean; models: string[]; error?: string }> =>
-    ipcRenderer.invoke(IPC.GET_API_MODELS),
+  getApiKey: (profile?: OpenAICompatiblePreset): Promise<string> =>
+    ipcRenderer.invoke(IPC.GET_API_KEY, profile),
+  saveApiKey: (apiKey: string, profile?: OpenAICompatiblePreset): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.SAVE_API_KEY, apiKey, profile),
+  getApiModels: (profile?: OpenAICompatiblePreset): Promise<{ success: boolean; models: string[]; error?: string }> =>
+    ipcRenderer.invoke(IPC.GET_API_MODELS, profile),
 
   // ── Correction ──
   correctText: (
@@ -128,17 +130,15 @@ const api = {
     ipcRenderer.on(IPC.DOWNLOAD_BONSAI_ERROR, listener);
     return () => ipcRenderer.removeListener(IPC.DOWNLOAD_BONSAI_ERROR, listener);
   },
-
-  // ── Startup model setup ──
   getStartupSetupStatus: (): Promise<StartupSetupStatus> =>
     ipcRenderer.invoke(IPC.GET_STARTUP_SETUP_STATUS),
+  startLocalModelSetup: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.START_LOCAL_MODEL_SETUP),
   onStartupSetupStatus: (callback: (status: StartupSetupStatus) => void) => {
     const listener = (_event: any, status: StartupSetupStatus) => callback(status);
     ipcRenderer.on(IPC.STARTUP_SETUP_STATUS, listener);
     return () => ipcRenderer.removeListener(IPC.STARTUP_SETUP_STATUS, listener);
   },
-  startLocalModelSetup: (): Promise<{ success: boolean }> =>
-    ipcRenderer.invoke(IPC.START_LOCAL_MODEL_SETUP),
 
   // ── Preview original text (from main → renderer) ──
   onSetPreviewOriginal: (callback: (text: string) => void) => {

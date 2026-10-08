@@ -98,8 +98,7 @@ describe('AppConfig type', () => {
       cliProvider: 'claude',
       cliModel: 'sonnet',
       timeoutSeconds: 60,
-      localHotkeyAccelerator: 'CommandOrControl+E',
-      cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+      localHotkeyAccelerator: 'CommandOrControl+Shift+E',
       undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
       launchAtLogin: false,
       historyLimit: 50,
@@ -134,7 +133,7 @@ describe('AppConfig type', () => {
     expect(config.localModelSpeed).toBe('fast');
   });
 
-  it('has localHotkeyAccelerator and cliHotkeyAccelerator fields', () => {
+  it('has localHotkeyAccelerator and apiHotkeyAccelerator fields', () => {
     const config: AppConfig = {
       ...DEFAULT_CONFIG,
       claudePath: '',
@@ -147,8 +146,7 @@ describe('AppConfig type', () => {
       cliProvider: 'claude',
       cliModel: 'sonnet',
       timeoutSeconds: 60,
-      localHotkeyAccelerator: 'CommandOrControl+E',
-      cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+      localHotkeyAccelerator: 'CommandOrControl+Shift+E',
       undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
       launchAtLogin: false,
       historyLimit: 50,
@@ -179,8 +177,8 @@ describe('AppConfig type', () => {
       meetingApps: ['Zoom', 'Microsoft Teams', 'Google Meet', 'Webex', 'FaceTime'],
       suppressedSuggestions: {},
     };
-    expect(config.localHotkeyAccelerator).toBe('CommandOrControl+E');
-    expect(config.cliHotkeyAccelerator).toBe('CommandOrControl+Shift+E');
+    expect(config.localHotkeyAccelerator).toBe('CommandOrControl+Shift+E');
+    expect(config.apiHotkeyAccelerator).toBe('CommandOrControl+E');
   });
 
   it('does NOT have a hotkeyAccelerator field in the type', () => {
@@ -196,8 +194,7 @@ describe('AppConfig type', () => {
       cliProvider: 'claude',
       cliModel: 'sonnet',
       timeoutSeconds: 60,
-      localHotkeyAccelerator: 'CommandOrControl+E',
-      cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+      localHotkeyAccelerator: 'CommandOrControl+Shift+E',
       undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
       launchAtLogin: false,
       historyLimit: 50,

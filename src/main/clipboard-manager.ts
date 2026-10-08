@@ -118,6 +118,41 @@ export async function pasteText(text: string): Promise<void> {
 }
 
 /**
+ * Replace the current selection, even in editors whose paste handler inserts
+ * at the caret instead of replacing the highlighted range. Re-copy the range
+ * immediately before editing so we never delete text after focus/selection has
+ * moved during correction.
+ */
+export async function replaceSelectedText(expectedText: string, replacement: string): Promise<void> {
+  const { keyboard, Key } = getNut();
+  const modifier = process.platform === 'darwin' ? Key.LeftSuper : Key.LeftControl;
+
+  clipboard.writeText('');
+  await keyboard.pressKey(modifier, Key.C);
+  await keyboard.releaseKey(modifier, Key.C);
+
+  let elapsed = 0;
+  let selectedText = '';
+  while (elapsed < MAX_POLL_WAIT) {
+    await delay(POLL_INTERVAL);
+    elapsed += POLL_INTERVAL;
+    selectedText = clipboard.readText();
+    if (selectedText) break;
+  }
+
+  if (selectedText !== expectedText) {
+    throw new Error('The original text is no longer selected, so GhostEdit left the text unchanged.');
+  }
+
+  // Explicitly remove the verified selection first. Some custom editors keep
+  // a visual highlight but handle paste as insertion at the caret.
+  await keyboard.pressKey(Key.Backspace);
+  await keyboard.releaseKey(Key.Backspace);
+  await delay(PRE_PASTE_DELAY);
+  await pasteText(replacement);
+}
+
+/**
  * Select and copy the current line from the focused app.
  * macOS: Cmd+Left → Cmd+Shift+Right → Cmd+C
  * Windows/Linux: Home → Shift+End → Ctrl+C

@@ -240,7 +240,7 @@ async function applySingleFix(index: number, suggestionIndex?: number): Promise<
     // Find and replace the issue word in the captured line
     const fixedResult = applyFixes(lineText, [fixIssue]);
     if (fixedResult.fixCount > 0) {
-      await clipboardManager.pasteText(fixedResult.text);
+      await clipboardManager.replaceSelectedText(lineText, fixedResult.text);
     }
 
     // Remove applied fix from issues
@@ -267,7 +267,7 @@ async function applyAllFixesHandler(): Promise<void> {
     const lineText = await clipboardManager.captureCurrentLine();
     const fixedResult = applyFixes(lineText, currentIssues);
     if (fixedResult.fixCount > 0) {
-      await clipboardManager.pasteText(fixedResult.text);
+      await clipboardManager.replaceSelectedText(lineText, fixedResult.text);
     }
 
     currentIssues = [];

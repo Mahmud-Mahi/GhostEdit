@@ -9,6 +9,8 @@ import {
   PROMPT_FILE_NAME,
   PERSONAL_DICTIONARY_FILE_NAME,
   DEFAULT_CONFIG,
+  DEFAULT_API_PROFILES,
+  API_PRESETS,
   DEFAULT_SYSTEM_PROMPT,
   BONSAI_DEFAULT_SYSTEM_PROMPT,
   CLI_PROVIDERS,
@@ -57,14 +59,46 @@ class ConfigManager {
         parsed.localHotkeyAccelerator = DEFAULT_CONFIG.localHotkeyAccelerator;
         delete parsed.hotkeyAccelerator;
       }
+      // Swap only the former defaults; preserve any user-customized accelerators.
+      // Former default pair: local was Ctrl+E while the provider hotkey was Ctrl+Shift+E.
+      if (
+        parsed.localHotkeyAccelerator === 'CommandOrControl+E' &&
+        parsed.cliHotkeyAccelerator === 'CommandOrControl+Shift+E'
+      ) {
+        parsed.localHotkeyAccelerator = DEFAULT_CONFIG.localHotkeyAccelerator;
+      }
+      // The dedicated CLI hotkey was removed — its accelerator moves into the API
+      // (General-tab provider) hotkey slot unless that one was already customized.
+      if ('cliHotkeyAccelerator' in parsed) {
+        const cliAcc = parsed.cliHotkeyAccelerator;
+        const apiUntouched =
+          !parsed.apiHotkeyAccelerator ||
+          parsed.apiHotkeyAccelerator === 'CommandOrControl+Alt+E'; // former default
+        const isFormerCliDefault =
+          !cliAcc ||
+          cliAcc === 'CommandOrControl+Shift+E' ||
+          cliAcc === 'CommandOrControl+E';
+        if (apiUntouched) {
+          parsed.apiHotkeyAccelerator = isFormerCliDefault
+            ? DEFAULT_CONFIG.apiHotkeyAccelerator
+            : cliAcc;
+        }
+        delete parsed.cliHotkeyAccelerator;
+      }
       // Migrate: add cliProvider/cliModel for configs that predate the dual-provider system
       if (!parsed.cliProvider) {
-        if (parsed.provider && parsed.provider !== 'local') {
+        if (parsed.provider && CLI_PROVIDERS[parsed.provider]) {
           parsed.cliProvider = parsed.provider;
           parsed.cliModel = parsed.model || CLI_PROVIDERS[parsed.provider]?.defaultModel || 'sonnet';
         }
         // else: DEFAULT_CONFIG spread below provides 'claude'/'sonnet'
       }
+      // Store each CLI's model independently while preserving the legacy active model.
+      parsed.cliModels = {
+        ...DEFAULT_CONFIG.cliModels,
+        ...(parsed.cliModels ?? {}),
+        ...(parsed.cliProvider ? { [parsed.cliProvider]: parsed.cliModel ?? DEFAULT_CONFIG.cliModel } : {}),
+      };
       // Migrate: showDiffPreview boolean → diffPreviewMode enum
       if ('showDiffPreview' in parsed && !('diffPreviewMode' in parsed)) {
         parsed.diffPreviewMode = parsed.showDiffPreview ? 'interactive' : 'none';
@@ -84,8 +118,27 @@ class ConfigManager {
       if (parsed.model === 't5-grammar' && parsed.provider === 'local') {
         parsed.model = 'bonsai-1.7b';
       }
+      // Preserve legacy single-API settings as the profile they previously selected.
+      const legacyProfile = (parsed.apiPreset ?? DEFAULT_CONFIG.apiPreset) as keyof typeof API_PRESETS;
+      const apiProfiles = { ...DEFAULT_API_PROFILES, ...(parsed.apiProfiles ?? {}) };
+      if (!parsed.apiProfiles?.[legacyProfile]) {
+        apiProfiles[legacyProfile] = {
+          baseUrl: parsed.apiBaseUrl ?? API_PRESETS[legacyProfile].baseUrl,
+          model: parsed.apiModel ?? API_PRESETS[legacyProfile].model,
+        };
+      }
+      const activeApiProfile = parsed.activeApiProfile ?? legacyProfile;
+      const selectedApiProfile = apiProfiles[activeApiProfile] ?? apiProfiles[legacyProfile];
       // Merge with defaults so new keys are always present
-      const config: AppConfig = { ...DEFAULT_CONFIG, ...parsed };
+      const config: AppConfig = {
+        ...DEFAULT_CONFIG,
+        ...parsed,
+        activeApiProfile,
+        apiProfiles,
+        apiPreset: activeApiProfile,
+        apiBaseUrl: selectedApiProfile.baseUrl,
+        apiModel: selectedApiProfile.model,
+      };
       this.cachedConfig = config;
       return { ...config };
     } catch {

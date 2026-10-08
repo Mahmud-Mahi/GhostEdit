@@ -71,12 +71,12 @@ describe('DEFAULT_CONFIG', () => {
     expect(DEFAULT_CONFIG.cliModel).toBe('sonnet');
   });
 
-  it('has localHotkeyAccelerator set to CommandOrControl+E', () => {
-    expect(DEFAULT_CONFIG.localHotkeyAccelerator).toBe('CommandOrControl+E');
+  it('has localHotkeyAccelerator set to CommandOrControl+Shift+E', () => {
+    expect(DEFAULT_CONFIG.localHotkeyAccelerator).toBe('CommandOrControl+Shift+E');
   });
 
-  it('has cliHotkeyAccelerator set to CommandOrControl+Shift+E', () => {
-    expect(DEFAULT_CONFIG.cliHotkeyAccelerator).toBe('CommandOrControl+Shift+E');
+  it('has apiHotkeyAccelerator set to CommandOrControl+E by default', () => {
+    expect(DEFAULT_CONFIG.apiHotkeyAccelerator).toBe('CommandOrControl+E');
   });
 
   it('does NOT have a hotkeyAccelerator property', () => {
@@ -190,9 +190,9 @@ describe('BONSAI_HF_REPOS', () => {
 });
 
 describe('BONSAI_DEFAULT_SYSTEM_PROMPT', () => {
-  it('is the Teacher prompt', () => {
-    expect(BONSAI_DEFAULT_SYSTEM_PROMPT).toContain('English teacher');
-    expect(BONSAI_DEFAULT_SYSTEM_PROMPT).toContain('corrected version');
+  it('is the proofreading prompt', () => {
+    expect(BONSAI_DEFAULT_SYSTEM_PROMPT).toContain('proofreading assistant');
+    expect(BONSAI_DEFAULT_SYSTEM_PROMPT).toContain('Return only the corrected text');
   });
 });
 

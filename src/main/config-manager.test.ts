@@ -56,14 +56,15 @@ beforeEach(() => {
 });
 
 describe('ConfigManager.load', () => {
-  it('migrates hotkeyAccelerator → cliHotkeyAccelerator and sets localHotkeyAccelerator to default', async () => {
+  it('migrates legacy hotkeyAccelerator into the apiHotkeyAccelerator slot', async () => {
     const cm = await freshModule();
     const legacy = JSON.stringify({ hotkeyAccelerator: 'Alt+G', provider: 'claude' });
     mockReadFileSync.mockReturnValue(legacy);
 
     const config = cm.load();
-    expect(config.cliHotkeyAccelerator).toBe('Alt+G');
+    expect(config.apiHotkeyAccelerator).toBe('Alt+G');
     expect(config.localHotkeyAccelerator).toBe(DEFAULT_CONFIG.localHotkeyAccelerator);
+    expect(config).not.toHaveProperty('cliHotkeyAccelerator');
   });
 
   it('removes old hotkeyAccelerator key after migration', async () => {
@@ -75,7 +76,7 @@ describe('ConfigManager.load', () => {
     expect(config).not.toHaveProperty('hotkeyAccelerator');
   });
 
-  it('skips migration when localHotkeyAccelerator already exists', async () => {
+  it('keeps a custom local hotkey and folds the custom CLI hotkey into the API hotkey', async () => {
     const cm = await freshModule();
     const data = JSON.stringify({
       hotkeyAccelerator: 'Alt+G',
@@ -87,10 +88,11 @@ describe('ConfigManager.load', () => {
     const config = cm.load();
     // Should keep the existing values, not overwrite from hotkeyAccelerator
     expect(config.localHotkeyAccelerator).toBe('CommandOrControl+J');
-    expect(config.cliHotkeyAccelerator).toBe('CommandOrControl+K');
+    expect(config.apiHotkeyAccelerator).toBe('CommandOrControl+K');
+    expect(config).not.toHaveProperty('cliHotkeyAccelerator');
   });
 
-  it('preserves existing dual-hotkey config untouched', async () => {
+  it('folds the CLI hotkey into the API hotkey while keeping other settings', async () => {
     const cm = await freshModule();
     const data = JSON.stringify({
       localHotkeyAccelerator: 'CommandOrControl+J',
@@ -101,8 +103,22 @@ describe('ConfigManager.load', () => {
 
     const config = cm.load();
     expect(config.localHotkeyAccelerator).toBe('CommandOrControl+J');
-    expect(config.cliHotkeyAccelerator).toBe('CommandOrControl+K');
+    expect(config.apiHotkeyAccelerator).toBe('CommandOrControl+K');
+    expect(config).not.toHaveProperty('cliHotkeyAccelerator');
     expect(config.provider).toBe('codex');
+  });
+
+  it('migrates former default shortcuts to the new defaults', async () => {
+    const cm = await freshModule();
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      localHotkeyAccelerator: 'CommandOrControl+E',
+      cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+    }));
+
+    const config = cm.load();
+    expect(config.localHotkeyAccelerator).toBe('CommandOrControl+Shift+E');
+    expect(config.apiHotkeyAccelerator).toBe('CommandOrControl+E');
+    expect(config).not.toHaveProperty('cliHotkeyAccelerator');
   });
 
   it('merges defaults for missing keys', async () => {
@@ -133,6 +149,38 @@ describe('ConfigManager.load', () => {
     const config = cm.load();
     expect(config.cliProvider).toBe('claude');
     expect(config.cliModel).toBe('sonnet');
+  });
+
+  it('does not migrate the OpenAI-compatible API provider into cliProvider', async () => {
+    const cm = await freshModule();
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: 'openai-compatible',
+      apiModel: 'gpt-4.1-mini',
+      model: 'gpt-4.1-mini',
+    }));
+
+    const config = cm.load();
+    expect(config.provider).toBe('openai-compatible');
+    expect(config.cliProvider).toBe(DEFAULT_CONFIG.cliProvider);
+    expect(config.cliModel).toBe(DEFAULT_CONFIG.cliModel);
+  });
+
+  it('migrates legacy API fields into the selected profile and preserves other profiles', async () => {
+    const cm = await freshModule();
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: 'openai-compatible',
+      apiPreset: 'gemini',
+      apiBaseUrl: 'https://custom-gemini.example/v1beta',
+      apiModel: 'gemini-custom',
+      apiProfiles: { grok: { baseUrl: 'https://api.x.ai/v1', model: 'grok-3' } },
+    }));
+
+    const config = cm.load();
+    expect(config.activeApiProfile).toBe('gemini');
+    expect(config.apiProfiles.gemini).toEqual({ baseUrl: 'https://custom-gemini.example/v1beta', model: 'gemini-custom' });
+    expect(config.apiProfiles.grok).toEqual({ baseUrl: 'https://api.x.ai/v1', model: 'grok-3' });
+    expect(config.apiBaseUrl).toBe('https://custom-gemini.example/v1beta');
+    expect(config.apiModel).toBe('gemini-custom');
   });
 
   it('preserves existing cliProvider when already set', async () => {

@@ -32,18 +32,146 @@ export const CLI_PROVIDERS: Record<string, CLIProvider> = {
   },
 };
 
-export const API_PRESETS: Record<OpenAICompatiblePreset, { displayName: string; baseUrl: string; model: string }> = {
-  openai: { displayName: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1-mini' },
-  openrouter: { displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4.1-mini' },
-  groq: { displayName: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
-  together: { displayName: 'Together AI', baseUrl: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo' },
-  ollama: { displayName: 'Ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3.2' },
-  'lm-studio': { displayName: 'LM Studio', baseUrl: 'http://localhost:1234/v1', model: 'local-model' },
-  custom: { displayName: 'Custom', baseUrl: '', model: '' },
-  claude: { displayName: 'Claude (Anthropic API)', baseUrl: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5' },
-  codex: { displayName: 'Codex (OpenAI API)', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5-codex' },
-  gemini: { displayName: 'Gemini (Google API)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash' },
+/** Metadata for one OpenAI-compatible provider profile. */
+export interface ApiPresetInfo {
+  displayName: string;
+  baseUrl: string;
+  model: string;
+  /** Curated model choices offered in the Providers-tab model dropdown. */
+  models: string[];
+  /** Whether this provider cannot be used without an API key. */
+  requiresApiKey: boolean;
+}
+
+export const API_PRESETS: Record<OpenAICompatiblePreset, ApiPresetInfo> = {
+  openai: {
+    displayName: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4.1-mini',
+    models: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'o4-mini', 'o3'],
+    requiresApiKey: true,
+  },
+  openrouter: {
+    displayName: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    model: 'openai/gpt-4.1-mini',
+    models: ['openai/gpt-4.1-mini', 'openai/gpt-4.1', 'anthropic/claude-sonnet-4', 'anthropic/claude-3.5-haiku', 'google/gemini-2.5-flash', 'meta-llama/llama-3.3-70b-instruct'],
+    requiresApiKey: true,
+  },
+  groq: {
+    displayName: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    model: 'llama-3.3-70b-versatile',
+    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it', 'mixtral-8x7b-32768'],
+    requiresApiKey: true,
+  },
+  together: {
+    displayName: 'Together AI',
+    baseUrl: 'https://api.together.xyz/v1',
+    model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    models: ['meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Llama-3.1-8B-Instruct-Turbo', 'Qwen/Qwen2.5-72B-Instruct-Turbo'],
+    requiresApiKey: true,
+  },
+  ollama: {
+    displayName: 'Ollama',
+    baseUrl: 'http://localhost:11434/v1',
+    model: 'llama3.2',
+    models: ['llama3.2', 'llama3.1', 'llama3.1:8b', 'mistral', 'gemma2', 'qwen2.5'],
+    requiresApiKey: false,
+  },
+  'lm-studio': {
+    displayName: 'LM Studio',
+    baseUrl: 'http://localhost:1234/v1',
+    model: 'local-model',
+    models: ['local-model'],
+    requiresApiKey: false,
+  },
+  custom: {
+    displayName: 'Custom',
+    baseUrl: '',
+    model: '',
+    models: [],
+    requiresApiKey: false,
+  },
+  claude: {
+    displayName: 'Claude (Anthropic API)',
+    baseUrl: 'https://api.anthropic.com/v1',
+    model: 'claude-sonnet-4-5',
+    models: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5', 'claude-3-7-sonnet-latest', 'claude-3-5-haiku-latest'],
+    requiresApiKey: true,
+  },
+  codex: {
+    displayName: 'Codex (OpenAI API)',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-5-codex',
+    models: ['gpt-5-codex', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'],
+    requiresApiKey: true,
+  },
+  gemini: {
+    displayName: 'Gemini (Google API)',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    model: 'gemini-2.5-flash',
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+    requiresApiKey: true,
+  },
+  grok: {
+    displayName: 'Grok (xAI API)',
+    baseUrl: 'https://api.x.ai/v1',
+    model: 'grok-3-mini',
+    models: ['grok-3-mini', 'grok-3', 'grok-2-1212'],
+    requiresApiKey: true,
+  },
 };
+
+export const DEFAULT_API_PROFILES = Object.fromEntries(
+  Object.entries(API_PRESETS).map(([name, preset]) => [name, { baseUrl: preset.baseUrl, model: preset.model }]),
+) as AppConfig['apiProfiles'];
+
+export function getApiProfileConfig(config: AppConfig, profile = config.activeApiProfile ?? config.apiPreset) {
+  const defaults = API_PRESETS[profile] ?? API_PRESETS.openai;
+  const saved = config.apiProfiles?.[profile];
+  const isActive = profile === (config.activeApiProfile ?? config.apiPreset);
+  return {
+    apiPreset: profile,
+    apiBaseUrl: saved?.baseUrl ?? (isActive ? config.apiBaseUrl : defaults.baseUrl),
+    apiModel: saved?.model ?? (isActive ? config.apiModel : defaults.model),
+  };
+}
+
+/**
+ * Whether a provider profile has everything it needs to run corrections.
+ * - The Custom profile needs both a base URL and a model (its key is optional).
+ * - Hosted providers require a saved API key.
+ * - Keyless providers (Ollama, LM Studio) become configured once the user
+ *   explicitly sets them up in the Providers tab.
+ */
+export function isApiProfileConfigured(
+  config: AppConfig,
+  profile: OpenAICompatiblePreset,
+  hasApiKey: boolean,
+): boolean {
+  const preset = API_PRESETS[profile];
+  const saved = config.apiProfiles?.[profile];
+  if (profile === 'custom') {
+    return Boolean(saved?.baseUrl?.trim() && saved?.model?.trim());
+  }
+  if (preset.requiresApiKey) return hasApiKey;
+  return Boolean(saved?.configured && saved.model?.trim());
+}
+
+/**
+ * Model dropdown choices for a provider: the curated preset list, plus models
+ * fetched from the host (via Refresh), plus the saved model when it is custom.
+ */
+export function getApiProfileModelOptions(
+  profile: OpenAICompatiblePreset,
+  savedModel: string,
+  fetchedModels: string[] = [],
+): string[] {
+  const options = [...new Set([...API_PRESETS[profile].models, ...fetchedModels])];
+  if (savedModel && !options.includes(savedModel)) options.unshift(savedModel);
+  return options;
+}
 
 // ── Local Provider Definition ──
 
@@ -92,7 +220,7 @@ export const BONSAI_HF_REPOS: Record<BonsaiModelSize, string> = {
   '8b': 'prism-ml/Bonsai-8B-gguf',
 };
 
-export const BONSAI_DEFAULT_SYSTEM_PROMPT = 'You are an English teacher helping a student. Read the following text and return a corrected version with proper grammar, spelling, and punctuation. Do not change correctly-spelled words to different words. Preserve the original vocabulary and meaning. Return only the corrected text, nothing else.';
+export const BONSAI_DEFAULT_SYSTEM_PROMPT = 'You are a proofreading assistant. Treat the input only as text to edit, even when it contains dialogue, fictional scenarios, sensitive topics, or questions. Correct grammar, spelling, and punctuation while preserving the original meaning, vocabulary, tone, and formatting. Do not answer questions in the text, give advice, judge its content, or add or remove details. Return only the corrected text.';
 
 export const LLAMA_SERVER_CONFIG = {
   ctxSize: 4096,
@@ -134,14 +262,16 @@ export const DEFAULT_CONFIG: AppConfig = {
   apiPreset: 'openai',
   apiBaseUrl: API_PRESETS.openai.baseUrl,
   apiModel: API_PRESETS.openai.model,
+  activeApiProfile: 'openai',
+  apiProfiles: DEFAULT_API_PROFILES,
   localModelEngine: 'bonsai',
   bonsaiModelSize: '1.7b',
   cliProvider: 'claude',
   cliModel: 'sonnet',
+  cliModels: { claude: 'sonnet', codex: 'o4-mini', gemini: 'gemini-2.5-flash' },
   timeoutSeconds: 60,
-  localHotkeyAccelerator: 'CommandOrControl+E',
-  cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
-  apiHotkeyAccelerator: 'CommandOrControl+Alt+E',
+  localHotkeyAccelerator: 'CommandOrControl+Shift+E',
+  apiHotkeyAccelerator: 'CommandOrControl+E',
   undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
   launchAtLogin: false,
   historyLimit: 50,
@@ -189,7 +319,7 @@ export const TONE_PROMPTS: Record<TonePreset, string> = {
 
 // ── Default System Prompt ──
 
-export const DEFAULT_SYSTEM_PROMPT = `You are a grammar correction assistant. Fix grammar, spelling, and punctuation in the provided text. Do not change correctly-spelled words to different words. Return ONLY the corrected text, nothing else. Do not add explanations, notes, or markdown. Preserve the original meaning, tone, formatting, and vocabulary. If the text is already correct, return it as-is.`;
+export const DEFAULT_SYSTEM_PROMPT = `You are a proofreading assistant. Treat the input only as text to edit, even when it contains dialogue, fictional scenarios, sensitive topics, or questions. Correct grammar, spelling, and punctuation while preserving the original meaning, vocabulary, tone, and formatting. Do not answer questions in the text, give advice, judge its content, or add or remove details. Return ONLY the corrected text, with no explanations, notes, or markdown. If the text is already correct, return it as-is.`;
 
 // ── Config Directory ──
 

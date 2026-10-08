@@ -6,6 +6,8 @@ interface WelcomeProps {
   config: AppConfig;
   onComplete: (updates: Partial<AppConfig>, installLocalModel: boolean) => void;
   onConfigUpdate: (updates: Partial<AppConfig>) => Promise<void>;
+  onInstallLocalModel: (updates: Partial<AppConfig>) => Promise<void>;
+  initialStep?: number;
 }
 
 const SAMPLE_TEXT = "Ths is a tset of GhostEdit's corection engine.";
@@ -36,8 +38,8 @@ const STEPS = [
   },
 ];
 
-export default function Welcome({ config, onComplete, onConfigUpdate }: WelcomeProps) {
-  const [step, setStep] = useState(0);
+export default function Welcome({ config, onComplete, onConfigUpdate, onInstallLocalModel, initialStep = 0 }: WelcomeProps) {
+  const [step, setStep] = useState(initialStep);
   const [selectedProvider, setSelectedProvider] = useState<ProviderName>(config.provider);
   const [selectedBonsaiSize, setSelectedBonsaiSize] = useState<BonsaiModelSize>(config.bonsaiModelSize ?? '1.7b');
   const [apiPreset, setApiPreset] = useState<OpenAICompatiblePreset>(presetForProvider(config.provider, config.apiPreset));
@@ -60,11 +62,11 @@ export default function Welcome({ config, onComplete, onConfigUpdate }: WelcomeP
     : STEPS;
 
   useEffect(() => {
-    window.ghostedit.getApiKey()
+    window.ghostedit.getApiKey(apiPreset)
       .then(setApiKey)
       .catch((err: unknown) => setApiSetupError(err instanceof Error ? err.message : String(err)))
       .finally(() => setApiKeyLoading(false));
-  }, []);
+  }, [apiPreset]);
 
   const handleApiSetupNext = async () => {
     const baseUrl = apiBaseUrl.trim();
@@ -75,7 +77,7 @@ export default function Welcome({ config, onComplete, onConfigUpdate }: WelcomeP
     }
 
     setApiSetupError(null);
-    const keyResult = await window.ghostedit.saveApiKey(apiKey.trim());
+    const keyResult = await window.ghostedit.saveApiKey(apiKey.trim(), apiPreset);
     if (!keyResult.success) {
       setApiSetupError(keyResult.error || 'Could not save API key.');
       return;
@@ -86,6 +88,8 @@ export default function Welcome({ config, onComplete, onConfigUpdate }: WelcomeP
       apiPreset,
       apiBaseUrl: baseUrl,
       apiModel: model,
+      activeApiProfile: apiPreset,
+      apiProfiles: { ...config.apiProfiles, [apiPreset]: { baseUrl, model, configured: true } },
       model,
     };
     try {
@@ -101,6 +105,15 @@ export default function Welcome({ config, onComplete, onConfigUpdate }: WelcomeP
       await handleApiSetupNext();
       return;
     }
+    if (step === 2 && selectedProvider === 'local') {
+      await onInstallLocalModel({
+        provider: 'local',
+        bonsaiModelSize: selectedBonsaiSize,
+        model: `bonsai-${selectedBonsaiSize}`,
+      });
+      setStep(3);
+      return;
+    }
     if (isLast) {
       if (selectedProvider === 'local') {
         onComplete({
@@ -108,7 +121,7 @@ export default function Welcome({ config, onComplete, onConfigUpdate }: WelcomeP
           provider: 'local',
           bonsaiModelSize: selectedBonsaiSize,
           model: `bonsai-${selectedBonsaiSize}`,
-        }, true);
+        }, false);
       } else {
         onComplete({
           firstRunComplete: true,
@@ -116,6 +129,8 @@ export default function Welcome({ config, onComplete, onConfigUpdate }: WelcomeP
           apiPreset,
           apiBaseUrl: apiBaseUrl.trim(),
           apiModel: apiModel.trim(),
+          activeApiProfile: apiPreset,
+          apiProfiles: { ...config.apiProfiles, [apiPreset]: { baseUrl: apiBaseUrl.trim(), model: apiModel.trim(), configured: true } },
           model: apiModel.trim(),
         }, false);
       }
@@ -187,9 +202,9 @@ export default function Welcome({ config, onComplete, onConfigUpdate }: WelcomeP
               </div>
             </div>
             <div>
-              <p className="text-xs text-ghost-muted mb-1">CLI Provider</p>
+              <p className="text-xs text-ghost-muted mb-1">Selected provider</p>
               <div className="inline-block px-4 py-2 rounded-lg bg-white/10 text-lg font-mono">
-                {formatHotkey(config.cliHotkeyAccelerator)}
+                {formatHotkey(config.apiHotkeyAccelerator)}
               </div>
             </div>
             <p className="text-sm text-ghost-muted max-w-sm">

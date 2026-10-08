@@ -6,6 +6,7 @@ import { createTray, updateMenu, destroyTray, setTrayState, setTrayTrafficColor 
 import { registerGlobalShortcuts, refreshGlobalShortcuts, unregisterAll } from './global-shortcuts';
 import { registerIPCHandlers } from './ipc-handlers';
 import { correctText } from './correction-dispatcher';
+import { getProviderShortcutTarget } from './provider-shortcut';
 import { preWarmModel } from './local-model-runner';
 import { ensureLlamaServer, shutdownLlamaServer } from './llama-server-manager';
 import { protectTokens, restoreTokens, bestEffortRestore, placeholdersAreIntact, getPlaceholderRanges, getOriginalTokenRanges, stripLeakedPlaceholders } from './token-preservation';
@@ -18,7 +19,7 @@ import type { ProviderName } from '../shared/types';
 import { IPC, type WindowType, type CorrectionHistoryEntry, type StartupSetupStatus } from '../shared/types';
 import { errorToUserMessage, errorToUserInfo } from './error-messages';
 import { clearDeviceCache } from './device-selector';
-import { playSuccessSound, playErrorSound } from './sound-manager';
+import { playErrorSound } from './sound-manager';
 import { appendError } from './error-log';
 import { startMonitoring, stopMonitoring, clearBuffer, resetTypingState, isMonitoringStarted } from './keystroke-monitor';
 import { initAppContextTracker, markTypingContext, checkForAppSwitch, clearContext, destroyAppContextTracker, getCurrentAppName } from './app-context-tracker';
@@ -350,9 +351,35 @@ export function getRecentCorrections(): Array<{ original: string; corrected: str
 let correcting = false;
 let pendingPreviewDecision: { resolve: (accepted: boolean) => void } | null = null;
 
+// ── Focus restoration for the interactive preview ──
+// Remembering the window that owns the selection lets us put focus back before
+// pasting. Without it, the preview window steals focus, the selection can be
+// lost when focus returns, and the corrected text is inserted beside the
+// original instead of replacing it.
+type NutWindowHandle = { focus: () => Promise<boolean> } | null;
+
+async function rememberActiveWindow(): Promise<NutWindowHandle> {
+  try {
+    const nut = require('@nut-tree-fork/nut-js');
+    return await nut.getActiveWindow();
+  } catch {
+    return null;
+  }
+}
+
+async function restoreWindowFocus(win: NutWindowHandle): Promise<void> {
+  try {
+    if (win) await win.focus();
+  } catch {
+    // Best-effort — the settle delay after this still applies.
+  }
+}
+
 async function performCorrection(providerOverride?: ProviderName, modelOverride?: string): Promise<void> {
   if (correcting) return;
   correcting = true;
+  // Record the target app before GhostEdit shows any windows or starts a provider.
+  const ownerWindowPromise = rememberActiveWindow();
   setTrayState('processing');
 
   const config = configManager.load();
@@ -362,8 +389,10 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
   const startTime = Date.now();
   let snap: ReturnType<typeof clipboardManager.snapshot> | null = null;
   let selectedText = '';
+  let ownerWindow: NutWindowHandle = null;
 
   try {
+    ownerWindow = await ownerWindowPromise;
     showHUD('Working...');
 
     // 1. Save clipboard
@@ -469,10 +498,11 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
         if (config.clipboardOnlyMode) {
           clipboardManager.writeToClipboard(correctedText);
         } else {
-          await clipboardManager.pasteText(correctedText);
+          await restoreWindowFocus(ownerWindow);
+          await new Promise((r) => setTimeout(r, 150));
+          await clipboardManager.replaceSelectedText(selectedText, correctedText);
         }
         pushRecentCorrection(selectedText, correctedText);
-        if (config.soundFeedbackEnabled) playSuccessSound();
         if (config.notifyOnSuccess) {
           new Notification({ title: 'GhostEdit', body: 'Correction applied.' }).show();
         }
@@ -500,11 +530,10 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
       if (config.clipboardOnlyMode) {
         clipboardManager.writeToClipboard(correctedText);
       } else {
-        await clipboardManager.pasteText(correctedText);
+        await clipboardManager.replaceSelectedText(selectedText, correctedText);
       }
       pushRecentCorrection(selectedText, correctedText);
 
-      if (config.soundFeedbackEnabled) playSuccessSound();
       if (config.notifyOnSuccess) {
         new Notification({ title: 'GhostEdit', body: 'Correction applied.' }).show();
       }
@@ -562,12 +591,11 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
         clipboardManager.writeToClipboard(correctedText);
         showHUD('Copied to clipboard!');
       } else {
-        await clipboardManager.pasteText(correctedText);
+        await clipboardManager.replaceSelectedText(selectedText, correctedText);
         showHUD('Done!');
       }
       pushRecentCorrection(selectedText, correctedText);
 
-      if (config.soundFeedbackEnabled) playSuccessSound();
       if (config.notifyOnSuccess) {
         new Notification({ title: 'GhostEdit', body: 'Correction applied.' }).show();
       }
@@ -705,11 +733,9 @@ async function correctCurrentLine(): Promise<void> {
       clipboardManager.writeToClipboard(correctedText);
       showHUD('Copied to clipboard!');
     } else {
-      await clipboardManager.pasteText(correctedText);
+      await clipboardManager.replaceSelectedText(lineText, correctedText);
       showHUD('Done!');
     }
-
-    if (config.soundFeedbackEnabled) playSuccessSound();
 
     const entry: CorrectionHistoryEntry = {
       id: randomUUID(),
@@ -904,6 +930,11 @@ app.whenReady().then(() => {
     getRecentCorrections: () => recentCorrections,
   };
 
+  const onCorrectConfiguredProvider = () => {
+    const target = getProviderShortcutTarget(configManager.load());
+    performCorrection(target.provider, target.model);
+  };
+
   // Create tray
   createTray(trayCallbacks);
 
@@ -917,16 +948,9 @@ app.whenReady().then(() => {
   // Register global hotkeys
   registerGlobalShortcuts(
     () => performCorrection('local'),
-    () => {
-      const c = configManager.load();
-      performCorrection(c.cliProvider, c.cliModel);
-    },
     () => undoLastCorrection(),
     () => correctCurrentLine(),
-    () => {
-      const c = configManager.load();
-      performCorrection('openai-compatible', c.apiModel);
-    },
+    onCorrectConfiguredProvider,
   );
 
   // Start real-time monitoring if enabled
@@ -959,16 +983,9 @@ app.whenReady().then(() => {
     updateMenu(trayCallbacks);
     refreshGlobalShortcuts(
       () => performCorrection('local'),
-      () => {
-        const c = configManager.load();
-        performCorrection(c.cliProvider, c.cliModel);
-      },
       () => undoLastCorrection(),
       () => correctCurrentLine(),
-      () => {
-        const c = configManager.load();
-        performCorrection('openai-compatible', c.apiModel);
-      },
+      onCorrectConfiguredProvider,
     );
 
     // Restart monitoring if config changed (enabled/disabled/position change)

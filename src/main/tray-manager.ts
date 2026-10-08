@@ -262,10 +262,6 @@ export function updateMenu(callbacks: TrayCallbacks): void {
       label: `Correct (Local) (${formatAccelerator(config.localHotkeyAccelerator)})`,
       click: callbacks.onCorrectLocal,
     },
-    {
-      label: `Correct (${cliProviderDef?.displayName ?? 'CLI'}) (${formatAccelerator(config.cliHotkeyAccelerator)})`,
-      click: callbacks.onCorrectCLI,
-    },
     ...(callbacks.onCorrectAPI ? [{
       label: `Correct (API) (${formatAccelerator(config.apiHotkeyAccelerator)})`,
       click: callbacks.onCorrectAPI,

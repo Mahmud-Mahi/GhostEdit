@@ -32,8 +32,8 @@
 
 - **Works in every app** -- System-wide hotkey correction, not a browser extension
 - **Offline-first AI** -- Built-in Bonsai grammar model runs on-device, no API keys needed
-- **Multi-provider** -- Switch between local AI, Claude, GPT, Gemini, or any OpenAI-compatible API in one click
-- **Bring your own key** -- OpenAI, OpenRouter, Groq, Together, Ollama, and LM Studio presets with encrypted key storage
+- **Multi-provider** -- Switch between local AI, Claude, GPT, Gemini, Grok, or any OpenAI-compatible API in one click
+- **Bring your own key** -- OpenAI, OpenRouter, Groq, Together, Grok (xAI), Claude/GPT/Gemini native endpoints, Ollama, LM Studio, and Custom presets, each with its own encrypted key (`~/.ghostedit/api-key-<profile>.enc`)
 - **Real-time monitoring** -- Traffic light indicator shows writing quality as you type
 - **Developer-friendly** -- Preserves code, URLs, @mentions, :emoji:, and file paths
 - **13 languages + tone presets** -- Auto-detect language, choose from 5 writing styles
@@ -42,7 +42,7 @@
 
 1. **Download** the latest release from [GitHub Releases](https://github.com/nareshnavinash/GhostEdit/releases/latest)
 2. **Open** GhostEdit -- it lives in your menu bar
-3. **Select text** anywhere and press the hotkey: `Cmd+E` (local) / `Cmd+Shift+E` (CLI) / `Cmd+Alt+E` (API) on macOS, `Ctrl+...` on Win/Linux
+3. **Select text** anywhere and press the hotkey: `Cmd+E` (General provider) / `Cmd+Shift+E` (local) on macOS, `Ctrl+...` on Win/Linux
 
 <!-- Add screenshot/GIF here: place a demo GIF or screenshot at assets/demo.gif and uncomment the line below -->
 <!-- <p align="center"><img src="assets/demo.gif" width="600" alt="GhostEdit demo"></p> -->
@@ -70,10 +70,10 @@
 
 ## Features
 
-- **Global hotkey** — Three configurable shortcuts: `Cmd+E` / `Ctrl+E` (local), `Cmd+Shift+E` / `Ctrl+Shift+E` (CLI), `Cmd+Alt+E` / `Ctrl+Alt+E` (API)
+- **Global hotkey** — Two configurable shortcuts: `Cmd+Shift+E` / `Ctrl+Shift+E` (local) and `Cmd+E` / `Ctrl+E` (General-tab provider)
 - **Offline-first** — Built-in Bonsai model served by the bundled llama.cpp runtime runs entirely on-device, no API keys needed
 - **Cloud providers** — Claude, Codex (OpenAI), and Gemini via their CLI tools
-- **OpenAI-compatible API** — Bring your own key for OpenAI, OpenRouter, Groq, Together AI, or local servers (Ollama, LM Studio); streaming corrections with encrypted key storage
+- **OpenAI-compatible API** — Bring your own key per provider: OpenAI, OpenRouter, Groq, Together AI, Grok (xAI), Claude/Codex/Gemini native endpoints, or local servers (Ollama, LM Studio); multi-profile setup with per-provider curated models, Refresh discovery, and encrypted key storage
 - **Dictionary pre-pass** — Harper.js (grammar) + nspell (spelling) fix obvious errors before the AI sees the text, making corrections faster and cheaper
 - **Dictionary polish** — Same engine runs again on model output to catch any remaining issues
 - **Diff preview** — Side-by-side streaming diff before accepting changes (Tab to accept, Esc to cancel)
@@ -103,9 +103,10 @@
 | Codex | `codex` | `npm install -g @openai/codex` |
 | Gemini | `gemini` | [ai.google.dev/gemini-api/docs/cli](https://ai.google.dev/gemini-api/docs/cli) |
 
-No CLI? Add an **API key** for any OpenAI-compatible host (OpenAI, OpenRouter,
-Groq, Together AI) or a local server (Ollama, LM Studio) in Settings >
-Providers — see [AI Providers](#ai-providers).
+No CLI? Add an **API key per provider** for any OpenAI-compatible host (OpenAI, OpenRouter,
+Groq, Together AI, Grok/xAI) or a local server (Ollama, LM Studio) in Settings >
+Providers — see [AI Providers](#ai-providers). Keys are stored encrypted, one file
+per provider (`~/.ghostedit/api-key-<profile>.enc`, e.g. `api-key-grok.enc`).
 
 Cloud providers are **not required**. The llama.cpp server is bundled per OS and
 architecture. When Local is selected, GhostEdit downloads the Bonsai model from
@@ -141,9 +142,9 @@ npm start
 
 On first launch, onboarding lets you choose a provider before local model setup:
 
-1. Choose a provider: **Local** (offline), an **OpenAI-compatible API** preset, or a cloud CLI tool.
+1. Choose a provider: **Local** (offline), an **OpenAI-compatible API** preset (each preset keeps its own model, base URL, and encrypted API key — set up as many as you need, including keyless Ollama/LM Studio), or a cloud CLI tool.
 2. For Local, pick a Bonsai model size (1.7B / 4B / 8B) — the app downloads it and shows progress.
-3. For an API preset, enter your base URL, model, and API key (stored encrypted).
+3. For an API preset, pick the preset card, enter your base URL, model (curated dropdown + **Refresh** from host), and API key (stored encrypted per profile).
 4. Set preferences and try a correction in the onboarding flow.
 
 After setup:
@@ -160,7 +161,7 @@ After setup:
 ### Basic correction
 
 1. **Select text** in any application (editor, browser, Slack, email, etc.)
-2. **Press the hotkey** (`Cmd+E` local / `Cmd+Shift+E` CLI / `Cmd+Alt+E` API by default)
+2. **Press the hotkey** (`Cmd+Shift+E` local / `Cmd+E` General-tab provider by default)
 3. GhostEdit captures the selection, corrects it, and pastes the result back
 
 ### Diff preview mode
@@ -179,9 +180,8 @@ When enabled, corrected text is copied to clipboard instead of being pasted back
 
 Right-click (or click on macOS) the tray icon to access:
 
-- **Correct (Local)** — Run the offline model (`Cmd+E`)
-- **Correct (CLI)** — Run the configured cloud CLI provider (`Cmd+Shift+E`)
-- **Correct (API)** — Run the OpenAI-compatible API provider (`Cmd+Alt+E`)
+- **Correct (Local)** — Run the offline model (`Cmd+Shift+E`)
+- **Correct (API)** — Run the General-tab provider (`Cmd+E`)
 - **Undo Last Correction** — Revert the last paste (`Cmd+Shift+Z`)
 - **Settings...** — Open the configuration window
 - **History...** — Browse past corrections
@@ -199,9 +199,9 @@ All settings are stored in `~/.ghostedit/config.json` and editable through the S
 
 **Local Model** — Bonsai model size, download, and inference device
 
-**Providers** — CLI tools plus OpenAI-compatible API presets, API key, and model discovery
+**Providers** — Per-CLI model + path cards, plus per-API-profile cards (model dropdown with curated + Refresh-discovered models, base URL, encrypted API key per provider)
 
-**Hotkeys** — Record custom global shortcuts (local, CLI, API, undo, line)
+**Hotkeys** — Record custom global shortcuts (local, General provider, undo, line)
 
 **Behavior** — Toggle features:
 
@@ -236,7 +236,8 @@ Create `~/.ghostedit/prompt.txt` to override the default system prompt. The file
 | `~/.ghostedit/config.json` | Application settings |
 | `~/.ghostedit/history.json` | Correction history |
 | `~/.ghostedit/prompt.txt` | Custom system prompt (optional) |
-| `~/.ghostedit/api-key.enc` | Encrypted OpenAI-compatible API key |
+| `~/.ghostedit/api-key.enc` | Legacy single encrypted API key (auto-migrated; removed when cleared) |
+| `~/.ghostedit/api-key-<profile>.enc` | Per-provider encrypted API key (e.g. `api-key-openai.enc`, `api-key-grok.enc`) |
 | `~/.ghostedit/models/bonsai/` | Downloaded Bonsai GGUF models |
 | `~/.ghostedit/device-cache.json` | Cached GPU/CPU detection result |
 
@@ -274,30 +275,47 @@ configs and is auto-migrated to Bonsai on first launch. When it is active,
 | Linux x64 (NVIDIA) | CUDA | WebGPU / WASM |
 | Linux arm64 | WebGPU | WASM (CPU) |
 
-### OpenAI-compatible API (bring your own key)
+### OpenAI-compatible API (bring your own key — one key per provider)
 
-Pick a preset in **Settings > Providers**, paste your API key (encrypted at
-rest with Electron `safeStorage`), and press **Load Models** to choose from the
-host's model list:
+GhostEdit v1.9.0 gives **every API preset its own profile**: model, base URL, and
+encrypted API key are saved independently, so you can configure OpenAI, Grok, Ollama,
+and others **all at once** instead of one global key.
 
-| Preset | Base URL | Default model |
-|--------|----------|---------------|
-| OpenAI | `https://api.openai.com/v1` | `gpt-4.1-mini` |
-| OpenRouter | `https://openrouter.ai/api/v1` | `openai/gpt-4.1-mini` |
-| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
-| Together AI | `https://api.together.xyz/v1` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
-| Ollama | `http://localhost:11434/v1` | `llama3.2` |
-| LM Studio | `http://localhost:1234/v1` | `local-model` |
-| Custom | (your URL) | (your model) |
-| Claude (Anthropic API) | `https://api.anthropic.com/v1` | `claude-sonnet-4-5` |
-| Codex (OpenAI API) | `https://api.openai.com/v1` | `gpt-5-codex` |
-| Gemini (Google API) | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.5-flash` |
+Pick presets in **Settings > Providers** — each card shows a **Configured /
+Not configured** badge. Hosted providers become configured once their key is saved;
+keyless hosts (Ollama, LM Studio, Custom) become configured once you pick/confirm a
+model. Paste your API key (encrypted at rest with Electron `safeStorage` into
+`~/.ghostedit/api-key-<profile>.enc`), choose from the curated model dropdown or
+press **Refresh** to list models live from the host.
+
+| Preset | Base URL | Default model | Key required? | Curated models |
+|--------|----------|---------------|---------------|----------------|
+| OpenAI | `https://api.openai.com/v1` | `gpt-4.1-mini` | Yes | `gpt-4.1-mini`, `gpt-4.1`, `gpt-4.1-nano`, `gpt-4o`, `gpt-4o-mini`, `o4-mini`, `o3` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `openai/gpt-4.1-mini` | Yes | `openai/gpt-4.1-mini`, `openai/gpt-4.1`, `anthropic/claude-sonnet-4`, `anthropic/claude-3.5-haiku`, `google/gemini-2.5-flash`, `meta-llama/llama-3.3-70b-instruct` |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | Yes | `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `gemma2-9b-it`, `mixtral-8x7b-32768` |
+| Together AI | `https://api.together.xyz/v1` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Yes | `meta-llama/Llama-3.3-70B-Instruct-Turbo`, `meta-llama/Llama-3.1-8B-Instruct-Turbo`, `Qwen/Qwen2.5-72B-Instruct-Turbo` |
+| Ollama | `http://localhost:11434/v1` | `llama3.2` | No | `llama3.2`, `llama3.1`, `llama3.1:8b`, `mistral`, `gemma2`, `qwen2.5` |
+| LM Studio | `http://localhost:1234/v1` | `local-model` | No | `local-model` |
+| Custom | (your URL) | (your model) | No | (your saved model + Refresh results) |
+| Claude (Anthropic API) | `https://api.anthropic.com/v1` | `claude-sonnet-4-5` | Yes | `claude-sonnet-4-5`, `claude-opus-4-1`, `claude-haiku-4-5`, `claude-3-7-sonnet-latest`, `claude-3-5-haiku-latest` |
+| Codex (OpenAI API) | `https://api.openai.com/v1` | `gpt-5-codex` | Yes | curated Codex/GPT list |
+| Gemini (Google API) | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.5-flash` | Yes | curated Gemini list |
+| Grok (xAI API) | `https://api.x.ai/v1` | `grok-3-mini` | Yes | `grok-3-mini`, `grok-3`, `grok-2-1212` |
+
+Then pick which configured provider actually runs in **Settings > General >
+Default correction model** — GhostEdit only offers providers you have configured
+(local is always offered; CLIs only when installed; APIs only when configured). The
+**API Hotkey** (`Cmd/Ctrl+E`) runs whatever is selected there.
 
 - Corrections **stream** into the diff preview like every other provider.
-- API keys are **encrypted at rest** (`~/.ghostedit/api-key.enc`) and never
-  stored in `config.json`.
-- Trigger with `Ctrl/Cmd+Alt+E` or the tray's **Correct (API)** entry.
-- Local servers (Ollama, LM Studio) work without an API key.
+- API keys are **encrypted at rest** (`~/.ghostedit/api-key-<profile>.enc`, legacy
+  `api-key.enc` auto-migrated) and never stored in `config.json`.
+- Legacy single-key configs migrate automatically: your old key/base-URL/model move
+  into the profile you had selected.
+- Trigger with `Ctrl/Cmd+E` (General provider) or the tray's **Correct (API)** entry.
+- Local servers (Ollama, LM Studio) and Custom bridges work without an API key.
+  Custom endpoints even fall back to the SSE streaming path for browser-backed
+  bridges.
 
 ### Cloud providers
 
@@ -466,19 +484,20 @@ npx vitest run --reporter=verbose
 | `dictionary-checker.integration.test.ts` | Integration | 36 | End-to-end with real Harper WASM and nspell Hunspell |
 | `token-preservation.test.ts` | Unit | 60 | URL, mention, code, and emoji protection |
 | `constants.test.ts` | Unit | 35 | Provider/preset definitions and defaults |
-| `Settings.test.tsx` | Component | 40 | Settings sections, model downloads, API key management |
+| `Settings.test.tsx` | Component | 50 | Settings sections, model downloads, per-profile API key management |
 | `local-model-runner.test.ts` | Unit | 24 | Pipeline loading, device routing, streaming, variant switching |
-| `config-manager.test.ts` | Unit | 22 | Config persistence and legacy T5 → Bonsai migration |
+| `config-manager.test.ts` | Unit | 27 | Config persistence, T5 → Bonsai migration, hotkey + per-profile API migration |
 | `history-store.test.ts` | Unit | 18 | History persistence and limits |
 | `openai-compatible-runner.test.ts` | Unit | 12 | API presets, model discovery, streaming, native endpoints |
-| `ipc-handlers.test.ts` | Unit | 12 | IPC handler registration and behavior |
-| `tray-manager.test.ts` | Unit | 19 | Tray menu entries including Correct (API) |
+| `ipc-handlers.test.ts` | Unit | 14 | IPC handler registration and behavior (incl. per-profile keys) |
+| `tray-manager.test.ts` | Unit | 20 | Tray menu entries (Local + API, no dedicated CLI item) |
 | `device-selector.test.ts` | Unit | 11 | Platform detection, disk caching, DirectML/CUDA probing |
-| `correction-dispatcher.test.ts` | Unit | 10 | Provider routing (local / CLI / API) |
-| `global-shortcuts.test.ts` | Unit | 10 | Hotkey registration and conflict detection |
+| `correction-dispatcher.test.ts` | Unit | 12 | Provider routing (local / CLI / API + per-profile config) |
+| `global-shortcuts.test.ts` | Unit | 12 | Hotkey registration and conflict detection (2 correction hotkeys) |
 | `cli-runner.test.ts` | Unit | 5 | CLI subprocess spawning and error handling |
+| `provider-shortcut.test.ts` | Unit | 5 | General-tab provider → shortcut target resolution |
 
-Current: **515 tests across 26 files, all passing**.
+Current: **530 tests across 28 files, all passing**.
 
 ---
 
@@ -674,10 +693,43 @@ scripts/
 
 ### "API request failed"
 
-- Verify the API key in Settings > Providers (keys are stored encrypted)
-- Confirm the base URL and model name match your host — use **Load Models** to refresh the list
+- Verify the right profile's API key in Settings > Providers (each provider stores its own encrypted key in `~/.ghostedit/api-key-<profile>.enc`)
+- Confirm the base URL and model name match your host — use **Refresh** on that provider's card to reload the list
 - For Ollama / LM Studio, ensure the local server is running on the expected port
 - The HUD and error log show the HTTP status and message returned by the host
+- If your Custom bridge reports `conversation_deleted`, reset its saved conversation and retry
+
+---
+
+## What's New in v1.9.0 — Per-Provider API Keys + Simplified Hotkeys
+
+**Your API-key system, explained:** every provider preset (OpenAI, OpenRouter, Groq,
+Together, Grok/xAI, Claude/Codex/Gemini native, Ollama, LM Studio, Custom) now keeps
+its **own model + base URL + encrypted key**. Configure several providers at once —
+the Providers tab shows a **Configured / Not configured** badge per card. A new
+**Grok (xAI)** preset (`https://api.x.ai/v1`, `grok-3-mini` + curated list) joins the
+matrix, each preset ships a curated model dropdown plus **Refresh** discovery, and
+legacy single-key configs auto-migrate into the profile you had selected.
+
+Hotkeys are simpler: **2 correction shortcuts** instead of 3 — `Cmd/Ctrl+Shift+E`
+(Local) and `Cmd/Ctrl+E` (**General-tab provider**, resolved via the new
+`provider-shortcut` module). The tray drops the dedicated CLI item in favor of
+**Correct (Local)** + **Correct (API)**. Pasting is safer via
+`replaceSelectedText()` (re-verify → Backspace → paste), each CLI remembers its own
+model, the proofreading system prompt no longer answers embedded questions, and the
+onboarding installs the local model before the Try-it step.
+
+| File (v1.9.0) | Platform | Size |
+|---------------|----------|------|
+| `GhostEdit-darwin-arm64-1.9.0.zip` | macOS Apple Silicon | ~480 MB |
+| `GhostEdit-darwin-x64-1.9.0.zip` | macOS Intel | ~483 MB |
+| `GhostEdit-win32-x64-1.9.0.zip` | Windows x64 | ~492 MB |
+| `GhostEdit-win32-arm64-1.9.0.zip` | Windows ARM64 | ~490 MB |
+| `ghostedit_1.9.0_amd64.deb` | Linux x64 (Debian) | ~322 MB |
+| `ghostedit_1.9.0_arm64.deb` | Linux ARM64 (Debian) | ~318 MB |
+
+Each bundle includes the pinned llama.cpp runtime; Bonsai models download on demand
+to `~/.ghostedit/models/bonsai/`.
 
 ---
 

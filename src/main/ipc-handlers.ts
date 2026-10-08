@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import { IPC, type AppConfig, type CorrectionHistoryEntry, type LocalModelVariant, type BonsaiModelSize, type WindowType } from '../shared/types';
 import { configManager } from './config-manager';
 import { loadApiKey, saveApiKey } from './api-key-store';
+import { getApiProfileConfig } from '../shared/constants';
 import { listApiModels } from './openai-compatible-runner';
 import { correctText, correctTextStreaming } from './correction-dispatcher';
 import { getLocalModelStatus, invalidatePipeline, downloadVariant } from './local-model-runner';
@@ -55,19 +56,21 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
     return statuses;
   });
 
-  ipcMain.handle(IPC.GET_API_KEY, () => loadApiKey());
-  ipcMain.handle(IPC.SAVE_API_KEY, (_event, apiKey: string) => {
+  ipcMain.handle(IPC.GET_API_KEY, (_event, profile) => loadApiKey(profile));
+  ipcMain.handle(IPC.SAVE_API_KEY, (_event, apiKey: string, profile) => {
     try {
-      saveApiKey(apiKey);
+      saveApiKey(apiKey, profile);
       return { success: true };
     } catch (err) {
       return { success: false, error: String(err) };
     }
   });
-  ipcMain.handle(IPC.GET_API_MODELS, async () => {
+  ipcMain.handle(IPC.GET_API_MODELS, async (_event, profile) => {
     try {
       const config = configManager.load();
-      return { success: true, models: await listApiModels(config.apiBaseUrl, loadApiKey(), config.apiPreset) };
+      const selectedProfile = profile ?? config.activeApiProfile;
+      const apiConfig = { ...config, ...getApiProfileConfig(config, selectedProfile) };
+      return { success: true, models: await listApiModels(apiConfig.apiBaseUrl, loadApiKey(selectedProfile), apiConfig.apiPreset) };
     } catch (err) {
       return { success: false, models: [], error: err instanceof Error ? err.message : String(err) };
     }
@@ -283,10 +286,14 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
       const localModel = config.localModelEngine === 'bonsai'
         ? `bonsai-${config.bonsaiModelSize}`
         : 't5-grammar';
+      const model = config.provider === 'local'
+        ? localModel
+        : config.provider === 'openai-compatible'
+          ? config.apiModel
+          : config.cliModel;
       const result = await correctText(prompt, '', {
         ...config,
-        provider: config.provider === 'local' ? 'local' : config.cliProvider,
-        model: config.provider === 'local' ? localModel : config.cliModel,
+        model,
       });
       return { success: true, explanation: result.text };
     } catch {
@@ -315,7 +322,7 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
             ? config.cliModel
             : config.model;
       const result = await correctText(
-        'You are a grammar correction assistant. Fix grammar, spelling, and punctuation in the provided text. Return ONLY the corrected text, nothing else.',
+        DEFAULT_SYSTEM_PROMPT,
         text,
         { ...config, model },
       );

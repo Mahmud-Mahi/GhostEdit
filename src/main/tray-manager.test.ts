@@ -90,8 +90,7 @@ beforeEach(() => {
   mockLoad.mockReturnValue({
     ...DEFAULT_CONFIG,
     provider: 'local',
-    localHotkeyAccelerator: 'CommandOrControl+E',
-    cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+    localHotkeyAccelerator: 'CommandOrControl+Shift+E',
   });
 });
 
@@ -163,11 +162,12 @@ describe('createTray', () => {
 });
 
 describe('updateMenu', () => {
-  it('builds menu with local and CLI correction items', async () => {
+  it('builds menu with local and API correction items (no dedicated CLI item)', async () => {
     const { createTray } = await freshModule();
     const callbacks = {
       onCorrectLocal: vi.fn(),
       onCorrectCLI: vi.fn(),
+      onCorrectAPI: vi.fn(),
       onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
@@ -177,9 +177,11 @@ describe('updateMenu', () => {
     // Check the captured menu template
     const labels = capturedMenuTemplate.map((item: any) => item.label).filter(Boolean);
     const hasLocalCorrect = labels.some((l: string) => l.includes('Correct (Local)'));
-    const hasCliCorrect = labels.some((l: string) => l.includes('Correct ('));
+    const hasApiCorrect = labels.some((l: string) => l.includes('Correct (API)'));
+    const hasCliCorrect = labels.some((l: string) => /^Correct \((Claude|Codex|Gemini)\)/.test(l));
     expect(hasLocalCorrect).toBe(true);
-    expect(hasCliCorrect).toBe(true);
+    expect(hasApiCorrect).toBe(true);
+    expect(hasCliCorrect).toBe(false);
   });
 
   it('exposes a tray action for API correction', async () => {
@@ -239,33 +241,26 @@ describe('updateMenu', () => {
     expect(onCorrectLocal).toHaveBeenCalledTimes(1);
   });
 
-  it('clicking CLI item calls onCorrectCLI callback', async () => {
+  it('does not show a CLI correction item in the tray menu', async () => {
     const { createTray } = await freshModule();
-    const onCorrectCLI = vi.fn();
-    const callbacks = {
+    createTray({
       onCorrectLocal: vi.fn(),
-      onCorrectCLI,
+      onCorrectCLI: vi.fn(),
       onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
-    };
-    createTray(callbacks);
+    });
 
-    const cliItem = capturedMenuTemplate.find((item: any) =>
-      item.label && item.label.includes('Correct (Claude)'),
-    );
-    cliItem.click();
-    expect(onCorrectCLI).toHaveBeenCalledTimes(1);
+    expect(capturedMenuTemplate.some((item: any) => item.label?.startsWith('Correct (Claude)'))).toBe(false);
   });
 
-  it('CLI label shows cliProvider displayName', async () => {
+  it('CLI status line shows cliProvider displayName', async () => {
     mockLoad.mockReturnValue({
       ...DEFAULT_CONFIG,
       provider: 'local',
       cliProvider: 'gemini',
       cliModel: 'gemini-2.5-flash',
-      localHotkeyAccelerator: 'CommandOrControl+E',
-      cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+      localHotkeyAccelerator: 'CommandOrControl+Shift+E',
     });
 
     const { createTray } = await freshModule();
@@ -278,10 +273,10 @@ describe('updateMenu', () => {
     };
     createTray(callbacks);
 
-    const cliItem = capturedMenuTemplate.find((item: any) =>
-      item.label && item.label.includes('Correct (Gemini)'),
+    const statusItem = capturedMenuTemplate.find((item: any) =>
+      item.label && item.label.includes('CLI: Gemini'),
     );
-    expect(cliItem).toBeDefined();
+    expect(statusItem).toBeDefined();
   });
 });
 
@@ -384,8 +379,7 @@ describe('updateTrayIssueCount', () => {
       ...DEFAULT_CONFIG,
       provider: 'local',
       monitoringEnabled: true,
-      localHotkeyAccelerator: 'CommandOrControl+E',
-      cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+      localHotkeyAccelerator: 'CommandOrControl+Shift+E',
     });
 
     const { createTray, updateTrayIssueCount } = await freshModule();
@@ -418,8 +412,7 @@ describe('updateTrayIssueCount', () => {
       ...DEFAULT_CONFIG,
       provider: 'local',
       monitoringEnabled: true,
-      localHotkeyAccelerator: 'CommandOrControl+E',
-      cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+      localHotkeyAccelerator: 'CommandOrControl+Shift+E',
     });
 
     const { createTray, updateTrayIssueCount } = await freshModule();
@@ -446,8 +439,7 @@ describe('updateTrayIssueCount', () => {
       ...DEFAULT_CONFIG,
       provider: 'local',
       monitoringEnabled: true,
-      localHotkeyAccelerator: 'CommandOrControl+E',
-      cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+      localHotkeyAccelerator: 'CommandOrControl+Shift+E',
     });
 
     const { createTray, updateTrayIssueCount } = await freshModule();
@@ -518,8 +510,7 @@ describe('developer mode', () => {
           ...DEFAULT_CONFIG,
           provider: 'local',
           developerMode: true,
-          localHotkeyAccelerator: 'CommandOrControl+E',
-          cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+          localHotkeyAccelerator: 'CommandOrControl+Shift+E',
         }),
       },
     }));

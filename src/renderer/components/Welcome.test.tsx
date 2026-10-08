@@ -10,6 +10,7 @@ const defaultProps = {
   config: { ...DEFAULT_CONFIG },
   onComplete: vi.fn(),
   onConfigUpdate: vi.fn().mockResolvedValue(undefined),
+  onInstallLocalModel: vi.fn().mockResolvedValue(undefined),
 };
 
 describe('Welcome component', () => {
@@ -18,13 +19,13 @@ describe('Welcome component', () => {
     expect(screen.getByText(/lives in your menu bar/i)).toBeInTheDocument();
   });
 
-  it('step 1 shows both hotkeys with Local Model and CLI Provider labels', () => {
+  it('step 1 shows local and selected-provider hotkeys', () => {
     render(<Welcome {...defaultProps} />);
     // Navigate to step 1
     fireEvent.click(screen.getByText('Next'));
 
     expect(screen.getByText('Local Model')).toBeInTheDocument();
-    expect(screen.getByText('CLI Provider')).toBeInTheDocument();
+    expect(screen.getByText('Selected provider')).toBeInTheDocument();
   });
 
   it('step 2 shows providers and all three local model choices', () => {
@@ -43,25 +44,31 @@ describe('Welcome component', () => {
     expect(screen.getByRole('button', { name: /Bonsai 8B/ })).toBeInTheDocument();
   });
 
-  it('step 3 shows "Try it now" with sample text and Fix it button', () => {
+  it('step 3 shows "Try it now" with sample text and Fix it button', async () => {
     render(<Welcome {...defaultProps} />);
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
 
-    expect(screen.getByText(/Try it now/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Try it now/i)).toBeInTheDocument());
     expect(screen.getByText('Fix it')).toBeInTheDocument();
     expect(screen.getByDisplayValue(/tset of GhostEdit/)).toBeInTheDocument();
   });
 
-  it('completing onboarding with local saves the selected Bonsai model size', () => {
+  it('completing onboarding with local saves the selected Bonsai model size', async () => {
     const onComplete = vi.fn();
-    render(<Welcome {...defaultProps} onComplete={onComplete} />);
+    const onInstallLocalModel = vi.fn().mockResolvedValue(undefined);
+    render(<Welcome {...defaultProps} onComplete={onComplete} onInstallLocalModel={onInstallLocalModel} />);
 
-    // Navigate to last step (step 3)
+    // Navigate to last step (step 3) — step 2 installs the local model first
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
+    await waitFor(() => expect(onInstallLocalModel).toHaveBeenCalledWith({
+      provider: 'local',
+      bonsaiModelSize: '1.7b',
+      model: 'bonsai-1.7b',
+    }));
     // Default is local; click Get Started
     fireEvent.click(screen.getByText('Get Started'));
 
@@ -70,24 +77,30 @@ describe('Welcome component', () => {
       provider: 'local',
       bonsaiModelSize: '1.7b',
       model: 'bonsai-1.7b',
-    }, true);
+    }, false);
   });
 
-  it('downloads the selected 8B model during first-run local setup', () => {
+  it('downloads the selected 8B model during first-run local setup', async () => {
     const onComplete = vi.fn();
-    render(<Welcome {...defaultProps} onComplete={onComplete} />);
+    const onInstallLocalModel = vi.fn().mockResolvedValue(undefined);
+    render(<Welcome {...defaultProps} onComplete={onComplete} onInstallLocalModel={onInstallLocalModel} />);
 
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByRole('button', { name: /Bonsai 8B/ }));
     fireEvent.click(screen.getByText('Next'));
+    await waitFor(() => expect(onInstallLocalModel).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'local',
+      bonsaiModelSize: '8b',
+      model: 'bonsai-8b',
+    })));
     fireEvent.click(screen.getByText('Get Started'));
 
     expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({
       provider: 'local',
       bonsaiModelSize: '8b',
       model: 'bonsai-8b',
-    }), true);
+    }), false);
   });
 
   it.each([
@@ -111,14 +124,16 @@ describe('Welcome component', () => {
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'provider-key' } });
     fireEvent.click(screen.getByText('Save & Continue'));
 
-    await waitFor(() => expect(onConfigUpdate).toHaveBeenCalledWith({
+    await waitFor(() => expect(onConfigUpdate).toHaveBeenCalledWith(expect.objectContaining({
       provider: 'openai-compatible',
       apiPreset: provider,
       apiBaseUrl: baseUrl,
       apiModel: model,
+      activeApiProfile: provider,
+      apiProfiles: expect.objectContaining({ [provider]: { baseUrl, model, configured: true } }),
       model,
-    }));
-    expect(window.ghostedit.saveApiKey).toHaveBeenCalledWith('provider-key');
+    })));
+    expect(window.ghostedit.saveApiKey).toHaveBeenCalledWith('provider-key', provider);
     expect(screen.getByText('Try it now')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Get Started'));
 
@@ -147,14 +162,16 @@ describe('Welcome component', () => {
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'test-model' } });
     fireEvent.click(screen.getByText('Save & Continue'));
 
-    await waitFor(() => expect(onConfigUpdate).toHaveBeenCalledWith({
+    await waitFor(() => expect(onConfigUpdate).toHaveBeenCalledWith(expect.objectContaining({
       provider: 'openai-compatible',
       apiPreset: 'openai',
       apiBaseUrl: 'https://api.example.test/v1',
       apiModel: 'test-model',
+      activeApiProfile: 'openai',
+      apiProfiles: expect.objectContaining({ openai: { baseUrl: 'https://api.example.test/v1', model: 'test-model', configured: true } }),
       model: 'test-model',
-    }));
-    expect(window.ghostedit.saveApiKey).toHaveBeenCalledWith('test-key');
+    })));
+    expect(window.ghostedit.saveApiKey).toHaveBeenCalledWith('test-key', 'openai');
     expect(screen.getByText('Try it now')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Get Started'));
@@ -196,12 +213,12 @@ describe('Welcome component', () => {
     expect(screen.getByText(/lives in your menu bar/i)).toBeInTheDocument();
   });
 
-  it('last step button says Get Started', () => {
+  it('last step button says Get Started', async () => {
     render(<Welcome {...defaultProps} />);
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
 
-    expect(screen.getByText('Get Started')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Get Started')).toBeInTheDocument());
   });
 });

@@ -2,7 +2,18 @@
 
 export type ProviderName = 'claude' | 'codex' | 'gemini' | 'local' | 'openai-compatible';
 export type CLIProviderName = 'claude' | 'codex' | 'gemini';
-export type OpenAICompatiblePreset = 'openai' | 'openrouter' | 'groq' | 'together' | 'ollama' | 'lm-studio' | 'custom' | 'claude' | 'codex' | 'gemini';
+export type OpenAICompatiblePreset = 'openai' | 'openrouter' | 'groq' | 'together' | 'ollama' | 'lm-studio' | 'custom' | 'claude' | 'codex' | 'gemini' | 'grok';
+
+export interface ApiProviderConfig {
+  baseUrl: string;
+  model: string;
+  /**
+   * True once the user explicitly configures this profile in the Providers tab
+   * (e.g. picks a model for keyless hosts like Ollama). Hosted providers are
+   * considered configured once their API key exists instead.
+   */
+  configured?: boolean;
+}
 
 export interface CLIProvider {
   name: CLIProviderName;
@@ -25,12 +36,14 @@ export interface AppConfig {
   apiPreset: OpenAICompatiblePreset;
   apiBaseUrl: string;
   apiModel: string;
+  activeApiProfile: OpenAICompatiblePreset;
+  apiProfiles: Record<OpenAICompatiblePreset, ApiProviderConfig>;
   cliProvider: CLIProviderName;  // CLI provider for the Shift hotkey (e.g. 'claude')
   cliModel: string;              // Model for the CLI provider (e.g. 'sonnet')
+  cliModels: Record<CLIProviderName, string>; // Model selection saved independently for every CLI
   timeoutSeconds: number;
-  localHotkeyAccelerator: string; // Electron accelerator for local model correction e.g. "CommandOrControl+E"
-  cliHotkeyAccelerator: string; // Electron accelerator for CLI provider correction e.g. "CommandOrControl+Shift+E"
-  apiHotkeyAccelerator: string; // Electron accelerator for API correction e.g. "CommandOrControl+Alt+E"
+  localHotkeyAccelerator: string; // Electron accelerator for local model correction e.g. "CommandOrControl+Shift+E"
+  apiHotkeyAccelerator: string; // Electron accelerator for the General-tab selected provider e.g. "CommandOrControl+E"
   undoHotkeyAccelerator: string; // Electron accelerator for undo last correction e.g. "CommandOrControl+Shift+Z"
   launchAtLogin: boolean;
   historyLimit: number;

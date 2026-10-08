@@ -236,3 +236,29 @@ describe('CORRECT_INLINE handler', () => {
     expect(result).toEqual({ success: true, text: 'corrected through Gemini' });
   });
 });
+
+describe('EXPLAIN_DIFF handler', () => {
+  it('keeps the OpenAI-compatible provider and API model selected', async () => {
+    const { correctText } = await import('./correction-dispatcher');
+    mockConfigLoad.mockReturnValue({
+      provider: 'openai-compatible',
+      apiPreset: 'openai',
+      apiBaseUrl: 'https://api.example.test/v1',
+      apiModel: 'api-model',
+      cliProvider: 'claude',
+      cliModel: 'sonnet',
+      localModelEngine: 'bonsai',
+      bonsaiModelSize: '1.7b',
+    } as any);
+    vi.mocked(correctText).mockResolvedValue({ text: 'Grammar correction', durationMs: 10 });
+
+    const result = await handlers[IPC.EXPLAIN_DIFF]({}, 'original', 'corrected');
+
+    expect(correctText).toHaveBeenCalledWith(expect.any(String), '', expect.objectContaining({
+      provider: 'openai-compatible',
+      apiModel: 'api-model',
+      model: 'api-model',
+    }));
+    expect(result).toEqual({ success: true, explanation: 'Grammar correction' });
+  });
+});

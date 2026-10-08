@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import type { AppConfig, CLIProviderName, TonePreset, DiffPreviewMode, BonsaiModelSize, BonsaiModelInfo, BonsaiServerStatus, UsageStats, OpenAICompatiblePreset } from '../../shared/types';
-import { CLI_PROVIDERS, API_PRESETS, LANGUAGES, DEFAULT_CONFIG, BONSAI_MODELS, TONE_PROMPTS } from '../../shared/constants';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import type { AppConfig, CLIProviderName, TonePreset, DiffPreviewMode, BonsaiModelSize, BonsaiModelInfo, BonsaiServerStatus, UsageStats, OpenAICompatiblePreset, ApiProviderConfig } from '../../shared/types';
+import { CLI_PROVIDERS, API_PRESETS, LANGUAGES, DEFAULT_CONFIG, BONSAI_MODELS, TONE_PROMPTS, getApiProfileConfig, isApiProfileConfigured, getApiProfileModelOptions } from '../../shared/constants';
 import HotkeyInput from '../components/HotkeyInput';
 import Welcome from '../components/Welcome';
 
@@ -17,7 +17,7 @@ const SECTIONS: Array<{
 }> = [
   { id: 'general',    label: 'General',    title: 'General',    subtitle: 'Language, tone, and correction preferences', icon: <GearIcon /> },
   { id: 'models',     label: 'Local Model', title: 'Local Model', subtitle: 'Offline correction engine configuration',    icon: <ChipIcon /> },
-  { id: 'providers',  label: 'Providers',  title: 'Providers',  subtitle: 'CLI tools and OpenAI-compatible API configuration', icon: <CloudIcon /> },
+  { id: 'providers',  label: 'Providers',  title: 'CLI Providers',  subtitle: 'CLI tools and OpenAI-compatible API configuration', icon: <CloudIcon /> },
   { id: 'hotkeys',    label: 'Hotkeys',    title: 'Hotkeys',    subtitle: 'Keyboard shortcuts for corrections',         icon: <KeyboardIcon /> },
   { id: 'behavior',   label: 'Behavior',   title: 'Behavior',   subtitle: 'Correction workflow and notifications',      icon: <SlidersIcon /> },
   { id: 'monitoring', label: 'Monitoring', title: 'Real-Time Monitoring', subtitle: 'Passive text analysis and traffic light indicator', icon: <EyeIcon /> },
@@ -41,12 +41,12 @@ export default function Settings() {
   const [bonsaiDownloadError, setBonsaiDownloadError] = useState<string | null>(null);
   const [bonsaiDownloadErrorSize, setBonsaiDownloadErrorSize] = useState<BonsaiModelSize | null>(null);
   const [inferenceDevice, setInferenceDevice] = useState<{ device: string; runtime: string; label: string } | null>(null);
-  const [apiKey, setApiKey] = useState('');
-  const [apiKeySaved, setApiKeySaved] = useState(false);
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-  const [apiModels, setApiModels] = useState<string[]>([]);
-  const [loadingApiModels, setLoadingApiModels] = useState(false);
-  const [apiModelsError, setApiModelsError] = useState<string | null>(null);
+  // API provider state — kept per profile so several providers can be configured at once
+  const [apiKeys, setApiKeys] = useState<Partial<Record<OpenAICompatiblePreset, string>>>({});
+  const [modelCatalogs, setModelCatalogs] = useState<Partial<Record<OpenAICompatiblePreset, string[]>>>({});
+  const [loadingModelsFor, setLoadingModelsFor] = useState<OpenAICompatiblePreset | null>(null);
+  const [modelListErrors, setModelListErrors] = useState<Partial<Record<OpenAICompatiblePreset, string | null>>>({});
+  const [keyFeedback, setKeyFeedback] = useState<Partial<Record<OpenAICompatiblePreset, { saved: boolean; message: string } | undefined>>>({});
 
   // Prompt editor state
   const [systemPrompt, setSystemPrompt] = useState('');
@@ -71,20 +71,35 @@ export default function Settings() {
   const [stats, setStats] = useState<UsageStats | null>(null);
   const [startupSetup, setStartupSetup] = useState<Awaited<ReturnType<typeof window.ghostedit.getStartupSetupStatus>> | null>(null);
   const [retryingStartupSetup, setRetryingStartupSetup] = useState(false);
+  const [resumeWelcomeAtTryout, setResumeWelcomeAtTryout] = useState(false);
+  const localSetupForWelcome = useRef(false);
 
   useEffect(() => {
-    const removeStartupListener = window.ghostedit.onStartupSetupStatus(setStartupSetup);
+    const removeStartupListener = window.ghostedit.onStartupSetupStatus((status) => {
+      setStartupSetup(status);
+      if (localSetupForWelcome.current && !status.active && status.stage === 'ready') {
+        localSetupForWelcome.current = false;
+        setResumeWelcomeAtTryout(true);
+      }
+    });
     window.ghostedit.getStartupSetupStatus().then(setStartupSetup);
     window.ghostedit.getConfig().then((loaded) => {
       const normalized = loaded.localModelEngine === 't5'
         ? { ...loaded, localModelEngine: 'bonsai' as const, model: `bonsai-${loaded.bonsaiModelSize ?? '1.7b'}` }
         : loaded;
       setConfig(normalized);
+      // Load every provider's key so General can list only configured models.
+      void Promise.all(
+        (Object.keys(API_PRESETS) as OpenAICompatiblePreset[]).map(async (profile) => {
+          try {
+            return [profile, await window.ghostedit.getApiKey(profile)] as const;
+          } catch {
+            return [profile, ''] as const;
+          }
+        }),
+      ).then((entries) => setApiKeys(Object.fromEntries(entries)));
       if (normalized !== loaded) void window.ghostedit.saveConfig(normalized);
     });
-    window.ghostedit.getApiKey()
-      .then(setApiKey)
-      .catch((err: unknown) => setApiKeyError(err instanceof Error ? err.message : String(err)));
     window.ghostedit.getCLIStatus().then(setCLIStatus);
     window.ghostedit.getInferenceDevice().then(setInferenceDevice);
     window.ghostedit.getBonsaiStatus().then((s) => setBonsaiModels(s.models));
@@ -118,30 +133,6 @@ export default function Settings() {
     }
   }, [activeSection]);
 
-  const handleLoadApiModels = useCallback(async () => {
-    setLoadingApiModels(true);
-    setApiModelsError(null);
-    try {
-      const result = await window.ghostedit.getApiModels();
-      if (!result.success) {
-        setApiModels([]);
-        setApiModelsError(result.error || 'Could not load models from this host');
-        return;
-      }
-      setApiModels(result.models);
-      setApiModelsError(null);
-    } catch (err) {
-      setApiModels([]);
-      setApiModelsError(err instanceof Error ? err.message : 'Could not load models from this host');
-    } finally {
-      setLoadingApiModels(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeSection === 'providers') void handleLoadApiModels();
-  }, [activeSection, config.apiBaseUrl, handleLoadApiModels]);
-
   const save = useCallback(async (updated: AppConfig) => {
     setConfig(updated);
     await window.ghostedit.saveConfig(updated);
@@ -155,6 +146,12 @@ export default function Settings() {
       setActiveSection('models');
       await window.ghostedit.startLocalModelSetup();
     }
+  }, [config, save]);
+
+  const handleWelcomeInstallLocalModel = useCallback(async (updates: Partial<AppConfig>) => {
+    await save({ ...config, ...updates, firstRunComplete: false });
+    localSetupForWelcome.current = true;
+    await window.ghostedit.startLocalModelSetup();
   }, [config, save]);
 
   const handleWelcomeConfigUpdate = useCallback(async (updates: Partial<AppConfig>) => {
@@ -182,16 +179,72 @@ export default function Settings() {
     [save],
   );
 
-
-  const handleSaveApiKey = useCallback(async () => {
-    const result = await window.ghostedit.saveApiKey(apiKey);
-    setApiKeyError(result.success ? null : result.error || 'Could not save API key');
-    setApiKeySaved(result.success);
-    if (result.success) {
-      setTimeout(() => setApiKeySaved(false), 1500);
-      void handleLoadApiModels();
+  const updateApiProfile = (profile: OpenAICompatiblePreset, values: Partial<ApiProviderConfig>) => {
+    const preset = API_PRESETS[profile];
+    const existing = config.apiProfiles?.[profile] ?? {
+      baseUrl: preset.baseUrl,
+      model: preset.model,
+    };
+    const nextProfile = { ...existing, ...values };
+    // Keyless local providers become "configured" once the user picks a model.
+    if (values.model !== undefined && !preset.requiresApiKey && profile !== 'custom') {
+      nextProfile.configured = values.model.trim().length > 0;
     }
-  }, [apiKey, handleLoadApiModels]);
+    update({
+      apiProfiles: { ...config.apiProfiles, [profile]: nextProfile },
+      ...(config.activeApiProfile === profile ? {
+        apiPreset: profile,
+        apiBaseUrl: nextProfile.baseUrl,
+        apiModel: nextProfile.model,
+        ...(config.provider === 'openai-compatible' ? { model: nextProfile.model } : {}),
+      } : {}),
+    });
+  };
+
+  const handleLoadApiModels = useCallback(async (profile: OpenAICompatiblePreset) => {
+    setLoadingModelsFor(profile);
+    setModelListErrors((prev) => ({ ...prev, [profile]: null }));
+    try {
+      const result = await window.ghostedit.getApiModels(profile);
+      if (!result.success) {
+        setModelListErrors((prev) => ({ ...prev, [profile]: result.error || 'Could not load models from this host' }));
+        return;
+      }
+      setModelCatalogs((prev) => ({ ...prev, [profile]: result.models }));
+      // A responding keyless host proves the provider is usable — mark it configured.
+      if (!API_PRESETS[profile].requiresApiKey && profile !== 'custom' && result.models.length > 0) {
+        updateApiProfile(profile, { configured: true });
+      }
+    } catch (err) {
+      setModelListErrors((prev) => ({
+        ...prev,
+        [profile]: err instanceof Error ? err.message : 'Could not load models from this host',
+      }));
+    } finally {
+      setLoadingModelsFor(null);
+    }
+  }, [updateApiProfile]);
+
+  const handleSaveApiKey = useCallback(async (profile: OpenAICompatiblePreset) => {
+    const value = (apiKeys[profile] ?? '').trim();
+    try {
+      const result = await window.ghostedit.saveApiKey(value, profile);
+      if (!result.success) {
+        setKeyFeedback((prev) => ({
+          ...prev,
+          [profile]: { saved: false, message: result.error || 'Could not save API key' },
+        }));
+        return;
+      }
+      setApiKeys((prev) => ({ ...prev, [profile]: value }));
+      setKeyFeedback((prev) => ({ ...prev, [profile]: { saved: true, message: 'API key saved' } }));
+    } catch (err) {
+      setKeyFeedback((prev) => ({
+        ...prev,
+        [profile]: { saved: false, message: err instanceof Error ? err.message : 'Could not save API key' },
+      }));
+    }
+  }, [apiKeys]);
 
   const handleDownloadBonsai = useCallback(async (size: BonsaiModelSize) => {
     if (downloadingBonsai) return;
@@ -337,6 +390,8 @@ export default function Settings() {
         config={config}
         onComplete={handleWelcomeComplete}
         onConfigUpdate={handleWelcomeConfigUpdate}
+        onInstallLocalModel={handleWelcomeInstallLocalModel}
+        initialStep={resumeWelcomeAtTryout ? 3 : 0}
       />
     );
   }
@@ -348,10 +403,24 @@ export default function Settings() {
     : SECTIONS;
 
   const cliProviderDef = CLI_PROVIDERS[config.cliProvider];
-  const cliModels = cliProviderDef?.availableModels ?? [];
-  const activeProvider = config.provider === 'local' || config.provider === 'openai-compatible'
-    ? config.provider
-    : config.cliProvider;
+  const cliModel = config.cliModels?.[config.cliProvider] ?? config.cliModel;
+  // Only providers that are actually configured (per the Providers tab) are offered.
+  const configuredApiProfiles = (Object.keys(API_PRESETS) as OpenAICompatiblePreset[]).filter((profile) =>
+    isApiProfileConfigured(config, profile, Boolean(apiKeys[profile])),
+  );
+  if (config.provider === 'openai-compatible' && !configuredApiProfiles.includes(config.activeApiProfile)) {
+    // Keep the active profile selectable so the dropdown value always has a matching option.
+    configuredApiProfiles.push(config.activeApiProfile);
+  }
+  const activeProvider = config.provider === 'openai-compatible'
+    ? `api:${config.activeApiProfile}`
+    : config.provider === 'local'
+      ? 'local'
+      : config.cliProvider;
+  // The CLI entry is only offered when the CLI is actually installed/configured.
+  const configuredCliProviders = (Object.keys(CLI_PROVIDERS) as CLIProviderName[]).filter((provider) =>
+    cliStatus[provider]?.found === true || Boolean(config[CLI_PROVIDERS[provider].configPathKey]) || activeProvider === provider,
+  );
   const currentSection = SECTIONS.find((s) => s.id === activeSection)!;
 
   return (
@@ -428,29 +497,51 @@ export default function Settings() {
                 <div className="settings-row gap-4">
                   <div>
                     <p className="whitespace-nowrap text-[13px] font-medium">Default correction model</p>
-                    <p className="text-[11px] text-ghost-muted">Used when you run the default correction action</p>
+                    <p className="text-[11px] text-ghost-muted">Provider used by Ctrl+E; local correction has its own hotkey</p>
                   </div>
                   <select
                     aria-label="Default correction model"
                     value={activeProvider}
                     onChange={(e) => {
-                      const provider = e.target.value as AppConfig['provider'];
-                      const model = provider === 'local'
-                        ? `bonsai-${config.bonsaiModelSize ?? '1.7b'}`
-                        : provider === 'openai-compatible'
-                          ? config.apiModel
-                          : config.cliModel;
-                      update({ provider, model, ...(provider === 'local' ? { localModelEngine: 'bonsai' } : {}) });
+                      const selected = e.target.value;
+                      if (selected === 'local') {
+                        update({
+                          provider: 'local',
+                          model: `bonsai-${config.bonsaiModelSize ?? '1.7b'}`,
+                          localModelEngine: 'bonsai',
+                        });
+                        return;
+                      }
+                      if (selected.startsWith('api:')) {
+                        const profile = selected.slice(4) as OpenAICompatiblePreset;
+                        const apiConfig = getApiProfileConfig(config, profile);
+                        update({
+                          provider: 'openai-compatible',
+                          activeApiProfile: profile,
+                          ...apiConfig,
+                          model: apiConfig.apiModel,
+                        });
+                        return;
+                      }
+                      const cli = selected as CLIProviderName;
+                      const model = config.cliModels?.[cli] ?? CLI_PROVIDERS[cli].defaultModel;
+                      update({ cliProvider: cli, cliModel: model, provider: cli, model });
                     }}
                     className="input !w-52 shrink-0"
                   >
                     <option value="local">
                       Local Model · Bonsai {config.bonsaiModelSize ?? '1.7b'}
                     </option>
-                    <option value="openai-compatible">API · {config.apiModel || 'No model selected'}</option>
-                    <option value={config.cliProvider}>
-                      CLI · {cliProviderDef?.displayName ?? config.cliProvider} ({config.cliModel})
-                    </option>
+                    {configuredApiProfiles.map((profile) => (
+                      <option key={profile} value={`api:${profile}`}>
+                        API · {API_PRESETS[profile].displayName} ({config.apiProfiles?.[profile]?.model || API_PRESETS[profile].model || 'No model selected'})
+                      </option>
+                    ))}
+                    {configuredCliProviders.map((cli) => (
+                      <option key={cli} value={cli}>
+                        CLI · {CLI_PROVIDERS[cli].displayName} ({config.cliModels?.[cli] ?? CLI_PROVIDERS[cli].defaultModel})
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -595,152 +686,74 @@ export default function Settings() {
               <>
                 <div className="settings-row">
                   <div>
-                    <p className="text-[13px] font-medium">Provider</p>
-                    <p className="text-[11px] text-ghost-muted">CLI tool for corrections</p>
-                  </div>
-                  <select
-                    value={config.cliProvider}
-                    onChange={(e) => {
-                      const p = e.target.value as CLIProviderName;
-                      update({
-                        cliProvider: p,
-                        cliModel: CLI_PROVIDERS[p].defaultModel,
-                        ...(config.provider !== 'local' && config.provider !== 'openai-compatible'
-                          ? { provider: p, model: CLI_PROVIDERS[p].defaultModel }
-                          : {}),
-                      });
-                    }}
-                    className="input w-44"
-                  >
-                    {Object.values(CLI_PROVIDERS).map((p) => (
-                      <option key={p.name} value={p.name}>
-                        {p.displayName}
-                        {cliStatus[p.name]?.found === false ? ' (not found)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="settings-row">
-                  <div>
-                    <p className="text-[13px] font-medium">Model</p>
-                    <p className="text-[11px] text-ghost-muted">Model used for CLI corrections</p>
-                  </div>
-                  <select
-                    value={config.cliModel}
-                    onChange={(e) => update({
-                      cliModel: e.target.value,
-                      ...(config.provider === config.cliProvider ? { model: e.target.value } : {}),
-                    })}
-                    className="input w-44"
-                  >
-                    {cliModels.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="settings-row">
-                  <div className="flex-1 mr-4">
-                    <p className="text-[13px] font-medium">{cliProviderDef?.displayName ?? ''} CLI Path</p>
-                    <p className="text-[11px] text-ghost-muted mb-2">Path to the CLI executable</p>
-                    <input
-                      type="text"
-                      value={config[cliProviderDef?.configPathKey] ?? ''}
-                      placeholder="Auto-detect"
-                      onChange={(e) => update({ [cliProviderDef?.configPathKey]: e.target.value } as any)}
-                      className="input"
-                    />
-                    <p className="text-[11px] mt-1.5">
-                      {cliStatus[config.cliProvider]?.found ? (
-                        <span className="text-ghost-success">Found: {cliStatus[config.cliProvider]?.path}</span>
-                      ) : (
-                        <span className="text-ghost-muted">Not found — install the CLI or set the path manually</span>
-                      )}
-                    </p>
+                    <p className="text-[13px] font-medium">CLI Providers</p>
+                    <p className="text-[11px] text-ghost-muted">Configure a model and executable path for each CLI provider</p>
                   </div>
                 </div>
+                {Object.values(CLI_PROVIDERS).map((cli) => {
+                  const model = config.cliModels?.[cli.name] ?? cli.defaultModel;
+                  const status = cliStatus[cli.name];
+                  const isActive = config.cliProvider === cli.name;
+                  return (
+                    <div key={cli.name} className="mb-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3" data-testid={`cli-provider-${cli.name}`}>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-[13px] font-medium">{cli.displayName} (CLI)</p>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${status?.found ? 'bg-ghost-success/15 text-ghost-success' : 'bg-white/[0.06] text-ghost-muted'}`}>
+                          {status?.found ? 'Configured' : 'Not configured'}{isActive ? ' · Active' : ''}
+                        </span>
+                      </div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <label htmlFor={`cli-model-${cli.name}`} className="w-16 shrink-0 text-[11px] text-ghost-muted">Model</label>
+                        <select id={`cli-model-${cli.name}`} aria-label={`Model for ${cli.displayName} CLI`} value={model}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            update({ cliModels: { ...config.cliModels, [cli.name]: next }, ...(isActive ? { cliModel: next } : {}), ...(config.provider === cli.name ? { model: next } : {}) });
+                          }} className="input min-w-0 flex-1">
+                          {cli.availableModels.map((option) => <option key={option} value={option}>{option}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label htmlFor={`cli-path-${cli.name}`} className="w-16 shrink-0 text-[11px] text-ghost-muted">CLI path</label>
+                        <input id={`cli-path-${cli.name}`} aria-label={`CLI path for ${cli.displayName}`} type="text" value={config[cli.configPathKey] ?? ''} placeholder="Auto-detect"
+                          onChange={(e) => update({ [cli.configPathKey]: e.target.value } as Partial<AppConfig>)} className="input min-w-0 flex-1" />
+                      </div>
+                      <p className="mt-1.5 text-[11px]">
+                        {status?.found ? <span className="text-ghost-success">Found: {status.path}</span> : <span className="text-ghost-muted">Not found — install the CLI or set the path manually</span>}
+                      </p>
+                    </div>
+                  );
+                })}
                 <div className="border-b border-ghost-row-border my-3" />
+                {/* ── API Provider configuration (all providers at once) ── */}
                 <div className="settings-row">
                   <div>
-                    <p className="text-[13px] font-medium">OpenAI-compatible API</p>
-                    <p className="text-[11px] text-ghost-muted">OpenAI-compatible chat completions</p>
+                    <p className="text-[13px] font-medium">API providers</p>
+                    <p className="text-[11px] text-ghost-muted">Configure models and API keys for each provider — set up as many as you need</p>
                   </div>
-                  <select
-                    value={config.apiPreset}
-                    onChange={(e) => {
-                      const preset = e.target.value as OpenAICompatiblePreset;
-                      const defaults = API_PRESETS[preset];
-                      update({
-                        apiPreset: preset,
-                        apiBaseUrl: defaults.baseUrl,
-                        apiModel: defaults.model,
-                        ...(config.provider === 'openai-compatible' ? { model: defaults.model } : {}),
-                      });
+                </div>
+
+                {(Object.keys(API_PRESETS) as OpenAICompatiblePreset[]).map((profile) => (
+                  <ApiProviderCard
+                    key={profile}
+                    profile={profile}
+                    config={config}
+                    apiKey={apiKeys[profile] ?? ''}
+                    catalog={modelCatalogs[profile] ?? []}
+                    loading={loadingModelsFor === profile}
+                    listError={modelListErrors[profile] ?? null}
+                    feedback={keyFeedback[profile] ?? null}
+                    onApiKeyChange={(value) => {
+                      setApiKeys((prev) => ({ ...prev, [profile]: value }));
+                      setKeyFeedback((prev) => ({ ...prev, [profile]: undefined }));
                     }}
-                    className="input w-44"
-                  >
-                    {Object.entries(API_PRESETS).map(([value, preset]) => (
-                      <option key={value} value={value}>{preset.displayName}</option>
-                    ))}
-                  </select>
-                </div>
+                    onModelChange={(model) => updateApiProfile(profile, { model })}
+                    onBaseUrlChange={(baseUrl) => updateApiProfile(profile, { baseUrl })}
+                    onRefresh={() => void handleLoadApiModels(profile)}
+                    onSaveKey={() => void handleSaveApiKey(profile)}
+                  />
+                ))}
 
-                <div className="settings-row">
-                  <div className="flex-1 mr-4">
-                    <p className="text-[13px] font-medium">Base URL</p>
-                    <p className="text-[11px] text-ghost-muted mb-2">The API v1 endpoint for your provider</p>
-                    <input type="url" value={config.apiBaseUrl} placeholder="https://api.example.com/v1" onChange={(e) => update({ apiBaseUrl: e.target.value })} className="input" />
-                  </div>
-                </div>
-
-                <div className="settings-row">
-                  <div className="flex-1 mr-4">
-                    <p className="text-[13px] font-medium">Model</p>
-                    <p className="text-[11px] text-ghost-muted mb-2">Models available from this API host</p>
-                    <div className="flex gap-2">
-                      <select
-                        value={config.apiModel}
-                        onChange={(e) => update({
-                          apiModel: e.target.value,
-                          ...(config.provider === 'openai-compatible' ? { model: e.target.value } : {}),
-                        })}
-                        className="input min-w-0 flex-1"
-                        disabled={loadingApiModels || apiModels.length === 0}
-                      >
-                        {config.apiModel && !apiModels.includes(config.apiModel) && (
-                          <option value={config.apiModel}>{config.apiModel} (configured)</option>
-                        )}
-                        {apiModels.length === 0 && !config.apiModel && <option value="">No model selected</option>}
-                        {apiModels.map((model) => <option key={model} value={model}>{model}</option>)}
-                      </select>
-                      <button
-                        onClick={handleLoadApiModels}
-                        disabled={loadingApiModels}
-                        className="rounded-md bg-white/10 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-white/15 disabled:cursor-wait disabled:opacity-50"
-                      >
-                        {loadingApiModels ? 'Loading…' : 'Refresh'}
-                      </button>
-                    </div>
-                    {apiModelsError && <p className="mt-1.5 text-[11px] text-ghost-error">{apiModelsError}</p>}
-                  </div>
-                </div>
-
-                <div className="settings-row">
-                  <div className="flex-1 mr-4">
-                    <p className="text-[13px] font-medium">API key</p>
-                    <p className="text-[11px] text-ghost-muted mb-2">Stored encrypted with system credential storage</p>
-                    <div className="flex gap-2">
-                      <input type="password" value={apiKey} placeholder="Required by hosted providers" autoComplete="new-password" onChange={(e) => { setApiKey(e.target.value); setApiKeySaved(false); }} className="input flex-1" />
-                      <button onClick={handleSaveApiKey} className="rounded-md bg-white/10 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-white/15">
-                        {apiKeySaved ? 'Saved' : 'Save key'}
-                      </button>
-                    </div>
-                    {apiKeyError && <p className="mt-1.5 text-[11px] text-ghost-error">{apiKeyError}</p>}
-                  </div>
-                </div>
-
-                <p className="mt-3 text-[11px] text-ghost-muted">Use the API action in the system tray or its configured hotkey to correct selected text.</p>
+                <p className="mt-3 text-[11px] text-ghost-muted">Choose which configured API or CLI to run in General.</p>
               </>
             )}
 
@@ -759,18 +772,8 @@ export default function Settings() {
                 </div>
                 <div className="settings-row">
                   <div className="flex-1 mr-4">
-                    <p className="text-[13px] font-medium">CLI Provider Hotkey</p>
-                    <p className="text-[11px] text-ghost-muted mb-2">Triggers correction using the configured CLI provider</p>
-                    <HotkeyInput
-                      value={config.cliHotkeyAccelerator}
-                      onChange={(v) => update({ cliHotkeyAccelerator: v })}
-                    />
-                  </div>
-                </div>
-                <div className="settings-row">
-                  <div className="flex-1 mr-4">
                     <p className="text-[13px] font-medium">API Hotkey</p>
-                    <p className="text-[11px] text-ghost-muted mb-2">Triggers correction using the configured OpenAI-compatible API</p>
+                    <p className="text-[11px] text-ghost-muted mb-2">Triggers correction with the model selected in General</p>
                     <HotkeyInput
                       value={config.apiHotkeyAccelerator}
                       onChange={(v) => update({ apiHotkeyAccelerator: v })}
@@ -858,7 +861,7 @@ export default function Settings() {
                 )}
                 <ToggleRow
                   label="Sound feedback"
-                  description="Play a sound when correction completes or fails"
+                  description="Play a sound when correction fails"
                   checked={config.soundFeedbackEnabled}
                   onChange={(v) => update({ soundFeedbackEnabled: v })}
                 />
@@ -1418,6 +1421,123 @@ const ToggleRow = React.memo(function ToggleRow({
     </div>
   );
 });
+
+// ── Per-provider API configuration card ──
+
+interface ApiProviderCardProps {
+  profile: OpenAICompatiblePreset;
+  config: AppConfig;
+  apiKey: string;
+  catalog: string[];
+  loading: boolean;
+  listError: string | null;
+  feedback: { saved: boolean; message: string } | null;
+  onApiKeyChange: (value: string) => void;
+  onModelChange: (model: string) => void;
+  onBaseUrlChange: (baseUrl: string) => void;
+  onRefresh: () => void;
+  onSaveKey: () => void;
+}
+
+function ApiProviderCard({
+  profile,
+  config,
+  apiKey,
+  catalog,
+  loading,
+  listError,
+  feedback,
+  onApiKeyChange,
+  onModelChange,
+  onBaseUrlChange,
+  onRefresh,
+  onSaveKey,
+}: ApiProviderCardProps) {
+  const preset = API_PRESETS[profile];
+  const saved = config.apiProfiles?.[profile];
+  const currentModel = saved?.model || preset.model;
+  const modelOptions = getApiProfileModelOptions(profile, currentModel, catalog);
+  const configured = isApiProfileConfigured(config, profile, apiKey.trim().length > 0);
+  const isActive = config.activeApiProfile === profile;
+  // Only the Custom preset needs a manual endpoint — every other preset has a built-in base URL.
+  const showBaseUrl = profile === 'custom';
+  const baseUrl = saved?.baseUrl ?? preset.baseUrl;
+
+  return (
+    <div className="mb-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3" data-testid={`api-provider-${profile}`}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[13px] font-medium">{preset.displayName}</p>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${configured ? 'bg-ghost-success/15 text-ghost-success' : 'bg-white/[0.06] text-ghost-muted'}`}>
+          {configured ? 'Configured' : 'Not configured'}
+          {isActive ? ' · Active' : ''}
+        </span>
+      </div>
+
+      {showBaseUrl && (
+        <div className="mb-2 flex items-center gap-2">
+          <label htmlFor={`api-base-url-${profile}`} className="w-16 shrink-0 text-[11px] text-ghost-muted">Base URL</label>
+          <input
+            id={`api-base-url-${profile}`}
+            aria-label={`Base URL for ${preset.displayName}`}
+            type="url"
+            value={baseUrl}
+            placeholder="https://api.example.com/v1"
+            onChange={(e) => onBaseUrlChange(e.target.value)}
+            className="input min-w-0 flex-1"
+          />
+        </div>
+      )}
+
+      <div className="mb-2 flex items-center gap-2">
+        <label htmlFor={`api-model-${profile}`} className="w-16 shrink-0 text-[11px] text-ghost-muted">Model</label>
+        <select
+          id={`api-model-${profile}`}
+          aria-label={`Model for ${preset.displayName}`}
+          value={currentModel}
+          onChange={(e) => onModelChange(e.target.value)}
+          className="input min-w-0 flex-1"
+        >
+          {!currentModel && <option value="">No model selected</option>}
+          {modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}
+        </select>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          aria-label={`Refresh models for ${preset.displayName}`}
+          className="shrink-0 rounded-md bg-white/10 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-white/15 disabled:cursor-wait disabled:opacity-50"
+        >
+          {loading ? 'Loading…' : 'Refresh'}
+        </button>
+      </div>
+      {listError && <p role="alert" className="mb-2 text-[11px] text-ghost-error">{listError}</p>}
+
+      <div className="flex items-center gap-2">
+        <label htmlFor={`api-key-${profile}`} className="w-16 shrink-0 text-[11px] text-ghost-muted">API key</label>
+        <input
+          id={`api-key-${profile}`}
+          aria-label={`API key for ${preset.displayName}`}
+          type="password"
+          value={apiKey}
+          placeholder={preset.requiresApiKey ? 'Required by hosted providers' : 'Optional for this provider'}
+          autoComplete="new-password"
+          onChange={(e) => onApiKeyChange(e.target.value)}
+          className="input min-w-0 flex-1"
+        />
+        <button
+          onClick={onSaveKey}
+          className="shrink-0 rounded-md bg-white/10 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-white/15"
+        >
+          Save key
+        </button>
+      </div>
+      {feedback && (
+        <p role={feedback.saved ? 'status' : 'alert'} className={`mt-1.5 text-[11px] ${feedback.saved ? 'text-ghost-success' : 'text-ghost-error'}`}>
+          {feedback.message}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function StatCard({ label, value, color }: { label: string; value: string | number; color?: 'green' | 'red' }) {
   const textColor = color === 'green' ? 'text-ghost-success' : color === 'red' ? 'text-ghost-error' : 'text-white/90';

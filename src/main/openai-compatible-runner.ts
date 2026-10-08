@@ -98,6 +98,10 @@ async function getErrorMessage(response: Response): Promise<string> {
   const body = await response.text().catch(() => '');
   try {
     const parsed = JSON.parse(body);
+    const errorCode = parsed.code ?? parsed.error?.code ?? parsed.detail?.code ?? parsed.detail?.error?.code;
+    if (errorCode === 'conversation_deleted') {
+      return 'The configured ChatGPT bridge is still using a deleted conversation. Reset its saved conversation or start a new bridge session, then retry.';
+    }
     return parsed.error?.message || body || response.statusText;
   } catch {
     return body || response.statusText;
@@ -144,6 +148,13 @@ export async function correctTextOpenAICompatible(
   config: AppConfig,
   apiKey: string,
 ): Promise<CorrectionResult> {
+  // Custom endpoints may bridge to browser-backed providers that only complete
+  // requests over SSE. Use the streaming response path even when the caller
+  // wants a final, non-streamed result.
+  if (config.apiPreset === 'custom') {
+    return correctTextOpenAICompatibleStreaming(systemPrompt, text, () => {}, config, apiKey);
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutSeconds * 1000);
   const started = Date.now();

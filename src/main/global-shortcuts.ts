@@ -5,43 +5,35 @@ import { DEFAULT_CONFIG } from '../shared/constants';
 type ShortcutHandler = () => void;
 
 let registeredLocalAccelerator: string | null = null;
-let registeredCliAccelerator: string | null = null;
 let registeredUndoAccelerator: string | null = null;
 let registeredLineAccelerator: string | null = null;
 let registeredApiAccelerator: string | null = null;
 
 /**
  * Register all global hotkeys for text correction, undo, and line correction.
+ * The API accelerator runs the provider selected in General (Ctrl+E by default);
+ * there is no dedicated CLI hotkey anymore.
  */
 export function registerGlobalShortcuts(
   localHandler: ShortcutHandler,
-  cliHandler: ShortcutHandler,
   undoHandler: ShortcutHandler,
   lineHandler?: ShortcutHandler,
   apiHandler?: ShortcutHandler,
 ): void {
   const config = configManager.load();
   const localAcc = config.localHotkeyAccelerator || DEFAULT_CONFIG.localHotkeyAccelerator;
-  const cliAcc = config.cliHotkeyAccelerator || DEFAULT_CONFIG.cliHotkeyAccelerator;
   const undoAcc = config.undoHotkeyAccelerator || DEFAULT_CONFIG.undoHotkeyAccelerator;
   const lineAcc = config.lineHotkeyAccelerator || DEFAULT_CONFIG.lineHotkeyAccelerator;
   const apiAcc = config.apiHotkeyAccelerator || DEFAULT_CONFIG.apiHotkeyAccelerator;
 
-  if (localAcc === cliAcc) {
-    console.warn('[GhostEdit] Local and CLI hotkeys are the same — only local will be registered');
-  }
-
   registerOne(localAcc, localHandler, 'local');
-  if (localAcc !== cliAcc) {
-    registerOne(cliAcc, cliHandler, 'cli');
-  }
-  if (undoAcc && undoAcc !== localAcc && undoAcc !== cliAcc) {
+  if (undoAcc && undoAcc !== localAcc) {
     registerOne(undoAcc, undoHandler, 'undo');
   }
-  if (lineHandler && lineAcc && lineAcc !== localAcc && lineAcc !== cliAcc && lineAcc !== undoAcc) {
+  if (lineHandler && lineAcc && lineAcc !== localAcc && lineAcc !== undoAcc) {
     registerOne(lineAcc, lineHandler, 'line');
   }
-  if (apiHandler && apiAcc && ![localAcc, cliAcc, undoAcc, lineAcc].includes(apiAcc)) {
+  if (apiHandler && apiAcc && ![localAcc, undoAcc, lineAcc].includes(apiAcc)) {
     registerOne(apiAcc, apiHandler, 'api');
   }
 }
@@ -56,10 +48,9 @@ function registerOne(accelerator: string, handler: ShortcutHandler, label: strin
     const success = globalShortcut.register(accelerator, handler);
     if (success) {
       if (label === 'local') registeredLocalAccelerator = accelerator;
-      else if (label === 'cli') registeredCliAccelerator = accelerator;
       else if (label === 'undo') registeredUndoAccelerator = accelerator;
       else if (label === 'line') registeredLineAccelerator = accelerator;
-          else if (label === 'api') registeredApiAccelerator = accelerator;
+      else if (label === 'api') registeredApiAccelerator = accelerator;
     } else {
       console.error(`[GhostEdit] Failed to register ${label} global shortcut: ${accelerator}`);
     }
@@ -73,13 +64,12 @@ function registerOne(accelerator: string, handler: ShortcutHandler, label: strin
  */
 export function refreshGlobalShortcuts(
   localHandler: ShortcutHandler,
-  cliHandler: ShortcutHandler,
   undoHandler: ShortcutHandler,
   lineHandler?: ShortcutHandler,
   apiHandler?: ShortcutHandler,
 ): void {
   unregisterAll();
-  registerGlobalShortcuts(localHandler, cliHandler, undoHandler, lineHandler, apiHandler);
+  registerGlobalShortcuts(localHandler, undoHandler, lineHandler, apiHandler);
 }
 
 /**
@@ -88,7 +78,6 @@ export function refreshGlobalShortcuts(
 export function unregisterAll(): void {
   globalShortcut.unregisterAll();
   registeredLocalAccelerator = null;
-  registeredCliAccelerator = null;
   registeredUndoAccelerator = null;
   registeredLineAccelerator = null;
   registeredApiAccelerator = null;

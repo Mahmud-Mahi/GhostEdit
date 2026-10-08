@@ -1,6 +1,6 @@
 {
   "name": "ghostedit",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Cross-platform AI text correction from the menu bar",
   "author": "GhostEdit contributors",
   "main": ".vite/build/index.js",

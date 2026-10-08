@@ -31,6 +31,7 @@ import { correctTextLocal, correctTextLocalStreaming } from './local-model-runne
 import { correctTextBonsai, correctTextBonsaiStreaming } from './bonsai-inference';
 import { correctText, correctTextStreaming } from './correction-dispatcher';
 import type { AppConfig } from '../shared/types';
+import { DEFAULT_CONFIG } from '../shared/constants';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -41,7 +42,15 @@ const t5Config = { provider: 'local', localModelEngine: 't5' } as AppConfig;
 const claudeConfig = { provider: 'claude' } as AppConfig;
 const geminiConfig = { provider: 'gemini' } as AppConfig;
 const codexConfig = { provider: 'codex' } as AppConfig;
-const apiConfig = { provider: 'openai-compatible' } as AppConfig;
+const apiConfig = {
+  ...DEFAULT_CONFIG,
+  provider: 'openai-compatible',
+  activeApiProfile: 'grok',
+  apiProfiles: {
+    ...DEFAULT_CONFIG.apiProfiles,
+    grok: { baseUrl: 'https://api.x.ai/v1', model: 'grok-3' },
+  },
+} as AppConfig;
 
 describe('correctText', () => {
   it('routes to correctTextBonsai when provider is local and engine is bonsai', async () => {
@@ -82,7 +91,12 @@ describe('correctText', () => {
 
     const result = await correctText('prompt', 'input text', apiConfig);
 
-    expect(correctTextOpenAICompatible).toHaveBeenCalledWith('prompt', 'input text', apiConfig, 'test-key');
+    expect(correctTextOpenAICompatible).toHaveBeenCalledWith('prompt', 'input text', expect.objectContaining({
+      provider: 'openai-compatible',
+      apiPreset: 'grok',
+      apiBaseUrl: 'https://api.x.ai/v1',
+      apiModel: 'grok-3',
+    }), 'test-key');
     expect(correctTextCLI).not.toHaveBeenCalled();
     expect(result.text).toBe('api result');
   });
@@ -138,7 +152,11 @@ describe('correctTextStreaming', () => {
 
     const result = await correctTextStreaming('prompt', 'text', onChunk, apiConfig);
 
-    expect(correctTextOpenAICompatibleStreaming).toHaveBeenCalledWith('prompt', 'text', onChunk, apiConfig, 'test-key');
+    expect(correctTextOpenAICompatibleStreaming).toHaveBeenCalledWith('prompt', 'text', onChunk, expect.objectContaining({
+      apiPreset: 'grok',
+      apiBaseUrl: 'https://api.x.ai/v1',
+      apiModel: 'grok-3',
+    }), 'test-key');
     expect(correctTextStreamingCLI).not.toHaveBeenCalled();
     expect(result.text).toBe('api streamed');
   });

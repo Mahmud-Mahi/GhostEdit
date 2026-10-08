@@ -78,6 +78,9 @@ beforeEach(() => {
   window.ghostedit.getUsageStats = vi.fn().mockResolvedValue({ totalCorrections: 0, successfulCorrections: 0, failedCorrections: 0, successRate: 0, totalDurationMs: 0, avgDurationMs: 0, totalWordsProcessed: 0, correctionsByProvider: {}, correctionsByDate: {} }) as any;
   window.ghostedit.getErrorLog = vi.fn().mockResolvedValue([]) as any;
   window.ghostedit.exportHistory = vi.fn().mockResolvedValue({ success: true }) as any;
+  window.ghostedit.getApiKey = vi.fn().mockResolvedValue('') as any;
+  window.ghostedit.saveApiKey = vi.fn().mockResolvedValue({ success: true }) as any;
+  window.ghostedit.getApiModels = vi.fn().mockResolvedValue({ success: true, models: ['gpt-4.1-mini', 'gpt-4.1'] }) as any;
   (window.ghostedit as any).platform = 'darwin';
   (window.ghostedit as any).windowControls = { close: vi.fn(), minimize: vi.fn() };
 });
@@ -275,21 +278,37 @@ describe('Settings component', () => {
     expect(window.ghostedit.getBonsaiStatus).toHaveBeenCalledTimes(2);
   });
 
-  it('selects API as the default correction model and saves its route', async () => {
+  it('selects an API profile for Ctrl+E and saves its route', async () => {
+    // A saved key marks the profile configured, so it appears in the dropdown.
+    window.ghostedit.getApiKey = vi.fn().mockImplementation((profile?: string) =>
+      Promise.resolve(profile === 'openai' ? 'sk-test' : ''),
+    ) as any;
+
     render(<Settings />);
     const select = await screen.findByLabelText('Default correction model');
 
-    fireEvent.change(select, { target: { value: 'openai-compatible' } });
+    await waitFor(() => {
+      const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+      expect(values).toContain('api:openai');
+    });
+
+    fireEvent.change(select, { target: { value: 'api:openai' } });
 
     await waitFor(() => {
       expect(window.ghostedit.saveConfig).toHaveBeenCalledWith(expect.objectContaining({
         provider: 'openai-compatible',
+        activeApiProfile: 'openai',
         model: DEFAULT_CONFIG.apiModel,
       }));
     });
   });
 
   it('selects the configured CLI model as the default correction route', async () => {
+    // The CLI option only appears when the CLI is actually installed.
+    window.ghostedit.getCLIStatus = vi.fn().mockResolvedValue({
+      claude: { found: true, path: '/usr/local/bin/claude' },
+    }) as any;
+
     render(<Settings />);
     const select = await screen.findByLabelText('Default correction model');
 
@@ -478,7 +497,7 @@ describe('Settings component', () => {
 
   // ── Providers Section ──
 
-  it('Providers section shows CLI provider selector with 3 providers', async () => {
+  it('Providers section shows a CLI provider card for each of the 3 CLI tools', async () => {
     render(<Settings />);
     await waitForSettingsLoaded();
 
@@ -486,54 +505,96 @@ describe('Settings component', () => {
     fireEvent.click(within(nav).getByText('Providers'));
 
     await waitFor(() => {
-      // "Provider" appears as row label in the content area
-      expect(screen.getByText('Provider')).toBeInTheDocument();
+      // Each CLI provider renders its own configuration card
+      expect(screen.getByTestId('cli-provider-claude')).toBeInTheDocument();
     });
 
-    const providerRow = screen.getByText('Provider').closest('.settings-row');
-    const select = providerRow?.querySelector('select');
-    expect(select).toBeTruthy();
-    const options = select!.querySelectorAll('option');
-    expect(options).toHaveLength(3);
+    expect(screen.getByTestId('cli-provider-claude')).toBeInTheDocument();
+    expect(screen.getByTestId('cli-provider-codex')).toBeInTheDocument();
+    expect(screen.getByTestId('cli-provider-gemini')).toBeInTheDocument();
+    // Each card exposes a model dropdown
+    expect(screen.getByLabelText('Model for Claude CLI')).toBeInTheDocument();
+    expect(screen.getByLabelText('Model for Codex CLI')).toBeInTheDocument();
+    expect(screen.getByLabelText('Model for Gemini CLI')).toBeInTheDocument();
   });
 
-  it('Providers section lists compatible API presets and lets the key be saved', async () => {
+  it('Providers section shows a configuration card for every API provider', async () => {
     render(<Settings />);
     await waitForSettingsLoaded();
     fireEvent.click(within(getSidebar()).getByText('Providers'));
 
-    await screen.findByText('OpenAI-compatible API');
-    const apiSelect = screen.getByText('OpenAI-compatible API').closest('.settings-row')?.querySelector('select');
-    if (!apiSelect) throw new Error('API provider select was not rendered');
-    expect(apiSelect.querySelectorAll('option')).toHaveLength(10);
-    expect(apiSelect.querySelector('option[value="claude"]')).toBeInTheDocument();
-    expect(apiSelect.querySelector('option[value="codex"]')).toBeInTheDocument();
-    expect(apiSelect.querySelector('option[value="gemini"]')).toBeInTheDocument();
-    fireEvent.change(apiSelect, { target: { value: 'groq' } });
+    await screen.findByText('API providers');
+    for (const name of [
+      'OpenAI', 'OpenRouter', 'Groq', 'Together AI', 'Ollama', 'LM Studio', 'Custom',
+      'Claude (Anthropic API)', 'Codex (OpenAI API)', 'Gemini (Google API)', 'Grok (xAI API)',
+    ]) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+
+    // Every card exposes a model dropdown and an API key field; base URL only on Custom.
+    expect(screen.getByLabelText('Model for OpenAI')).toBeInTheDocument();
+    expect(screen.getByLabelText('API key for OpenAI')).toBeInTheDocument();
+    const baseUrlInputs = screen.getAllByPlaceholderText('https://api.example.com/v1');
+    expect(baseUrlInputs).toHaveLength(1);
+    const customCard = screen.getByTestId('api-provider-custom');
+    expect(within(customCard).getByLabelText('Base URL for Custom')).toBeInTheDocument();
+  });
+
+  it('Providers section keeps API profiles independent and saves a profile key', async () => {
+    render(<Settings />);
+    await waitForSettingsLoaded();
+    fireEvent.click(within(getSidebar()).getByText('Providers'));
+
+    await screen.findByTestId('api-provider-grok');
+
+    // Configure two providers at once — both cards are visible simultaneously.
+    fireEvent.change(screen.getByLabelText('Model for Grok (xAI API)'), { target: { value: 'grok-3' } });
+    fireEvent.change(screen.getByLabelText('Model for OpenAI'), { target: { value: 'gpt-4.1' } });
     await waitFor(() => {
       expect(window.ghostedit.saveConfig).toHaveBeenCalledWith(expect.objectContaining({
-        apiPreset: 'groq',
-        apiBaseUrl: 'https://api.groq.com/openai/v1',
-        apiModel: 'llama-3.3-70b-versatile',
+        apiProfiles: expect.objectContaining({
+          openai: expect.objectContaining({ baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1' }),
+          grok: expect.objectContaining({ baseUrl: 'https://api.x.ai/v1', model: 'grok-3' }),
+        }),
       }));
     });
 
-    const modelSelect = screen.getByText('Models available from this API host').closest('.settings-row')?.querySelector('select');
-    if (!modelSelect) throw new Error('API model select was not rendered');
+    const openaiCard = screen.getByTestId('api-provider-openai');
+    const modelSelect = within(openaiCard).getByLabelText('Model for OpenAI');
+    fireEvent.click(within(openaiCard).getByRole('button', { name: 'Refresh models for OpenAI' }));
     await waitFor(() => {
-      expect(window.ghostedit.getApiModels).toHaveBeenCalled();
-      expect(modelSelect.querySelectorAll('option')).toHaveLength(3);
+      expect(window.ghostedit.getApiModels).toHaveBeenCalledWith('openai');
+      expect(modelSelect.querySelectorAll('option').length).toBeGreaterThanOrEqual(2);
     });
     fireEvent.change(modelSelect, { target: { value: 'gpt-4.1' } });
     await waitFor(() => {
       expect(window.ghostedit.saveConfig).toHaveBeenCalledWith(expect.objectContaining({ apiModel: 'gpt-4.1' }));
     });
 
-    fireEvent.change(screen.getByPlaceholderText('Required by hosted providers'), { target: { value: 'secret' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save key' }));
+    fireEvent.change(within(openaiCard).getByPlaceholderText('Required by hosted providers'), { target: { value: 'secret' } });
+    fireEvent.click(within(openaiCard).getByRole('button', { name: 'Save key' }));
     await waitFor(() => {
-      expect(window.ghostedit.saveApiKey).toHaveBeenCalledWith('secret');
+      expect(window.ghostedit.saveApiKey).toHaveBeenCalledWith('secret', 'openai');
+      expect(screen.getByText('API key saved')).toBeInTheDocument();
     });
+  });
+
+  it('marks a keyless provider as configured after picking a model', async () => {
+    render(<Settings />);
+    await waitForSettingsLoaded();
+    fireEvent.click(within(getSidebar()).getByText('Providers'));
+
+    await screen.findByTestId('api-provider-ollama');
+    fireEvent.change(screen.getByLabelText('Model for Ollama'), { target: { value: 'llama3.1' } });
+
+    await waitFor(() => {
+      expect(window.ghostedit.saveConfig).toHaveBeenCalledWith(expect.objectContaining({
+        apiProfiles: expect.objectContaining({
+          ollama: expect.objectContaining({ model: 'llama3.1', configured: true }),
+        }),
+      }));
+    });
+    expect(within(screen.getByTestId('api-provider-ollama')).getByText('Configured')).toBeInTheDocument();
   });
 
   it('shows an error when the API host cannot provide its model catalog', async () => {
@@ -547,8 +608,91 @@ describe('Settings component', () => {
     await waitForSettingsLoaded();
     fireEvent.click(within(getSidebar()).getByText('Providers'));
 
-    expect(await screen.findByText('Could not load models (404): Not supported')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+    await screen.findByTestId('api-provider-openai');
+    const openaiCard = screen.getByTestId('api-provider-openai');
+    fireEvent.click(within(openaiCard).getByRole('button', { name: 'Refresh models for OpenAI' }));
+
+    expect(await within(openaiCard).findByText('Could not load models (404): Not supported')).toBeInTheDocument();
+    expect(within(openaiCard).getByRole('button', { name: 'Refresh models for OpenAI' })).toBeInTheDocument();
+  });
+
+  it('General model dropdown lists only configured API providers', async () => {
+    // Only grok has a saved key, so it is the only hosted profile offered.
+    window.ghostedit.getApiKey = vi.fn().mockImplementation((profile?: string) =>
+      Promise.resolve(profile === 'grok' ? 'grok-key' : ''),
+    ) as any;
+    // The installed CLI still qualifies as configured.
+    window.ghostedit.getCLIStatus = vi.fn().mockResolvedValue({
+      claude: { found: true, path: '/usr/local/bin/claude' },
+    }) as any;
+    window.ghostedit.getConfig = vi.fn().mockResolvedValue({
+      ...DEFAULT_CONFIG,
+      firstRunComplete: true,
+      settingsMode: 'advanced',
+      provider: 'openai-compatible',
+      activeApiProfile: 'grok',
+      apiModel: 'grok-3-mini',
+      model: 'grok-3-mini',
+    }) as any;
+
+    render(<Settings />);
+    const select = await screen.findByLabelText('Default correction model');
+
+    await waitFor(() => {
+      const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+      expect(values).toContain('api:grok');
+      expect(values).toContain(DEFAULT_CONFIG.cliProvider);
+      expect(values).not.toContain('api:openai');
+      expect(values).not.toContain('api:ollama');
+      expect(values).not.toContain('api:groq');
+    });
+  });
+
+  it('General model dropdown hides the CLI option when the CLI is not installed', async () => {
+    // No API keys, no local CLI: only the built-in local model should be offered.
+    render(<Settings />);
+    const select = await screen.findByLabelText('Default correction model');
+
+    await waitFor(() => {
+      const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+      expect(values).toEqual(['local']);
+    });
+  });
+
+  it('General model dropdown shows the CLI option when the CLI is installed', async () => {
+    window.ghostedit.getCLIStatus = vi.fn().mockResolvedValue({
+      claude: { found: true, path: '/usr/local/bin/claude' },
+    }) as any;
+
+    render(<Settings />);
+    const select = await screen.findByLabelText('Default correction model');
+
+    await waitFor(() => {
+      const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+      expect(values).toContain('local');
+      expect(values).toContain(DEFAULT_CONFIG.cliProvider);
+    });
+  });
+
+  it('General model dropdown lists a keyless provider configured in the Providers tab', async () => {
+    window.ghostedit.getConfig = vi.fn().mockResolvedValue({
+      ...DEFAULT_CONFIG,
+      firstRunComplete: true,
+      settingsMode: 'advanced',
+      apiProfiles: {
+        ...DEFAULT_CONFIG.apiProfiles,
+        ollama: { ...DEFAULT_CONFIG.apiProfiles.ollama, model: 'llama3.1', configured: true },
+      },
+    }) as any;
+
+    render(<Settings />);
+    const select = await screen.findByLabelText('Default correction model');
+
+    await waitFor(() => {
+      const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+      expect(values).toContain('api:ollama');
+      expect(values).not.toContain('api:openai');
+    });
   });
 
   // ── Hotkeys Section ──
@@ -562,7 +706,7 @@ describe('Settings component', () => {
 
     await waitFor(() => {
       const inputs = screen.getAllByTestId('hotkey-input');
-      expect(inputs).toHaveLength(4);
+      expect(inputs).toHaveLength(3);
     });
   });
 
